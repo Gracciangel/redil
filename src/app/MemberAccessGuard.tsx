@@ -1,7 +1,7 @@
 import { Navigate, Outlet, useNavigate } from 'react-router-dom'
 import { Alert, Box, Button, Stack, Typography } from '@mui/material'
-import { LoadingList } from '@/components/Feedback'
 import { getMyMembership } from '@/features/congregations/services/membership'
+import { LoadingOverlay } from '@/components/LoadingOverlay'
 import { useAsyncData } from '@/lib/hooks'
 import { bump } from '@/lib/live'
 import { clearAuthSession, isAuthSessionError } from '@/supabase/login'
@@ -56,7 +56,7 @@ export function MemberAccessGuard() {
     )
   }
 
-  if (loading && !data) return <LoadingList rows={3} />
+  if (loading && !data) return <LoadingOverlay label="Verificando acceso…" />
 
   // Sin membresía el único destino permitido es /acceso.
   if (!data) return <Navigate to="/acceso" replace />

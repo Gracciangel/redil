@@ -19,6 +19,8 @@ export type CreateNotice = { tone: 'ok' | 'error'; text: string }
 
 export interface ProfileVM {
   isTenant: boolean
+  /** vify de la congregación: habilita el tilde azul en el Perfil. */
+  verified: boolean
   name: string
   email: string | null
   photoURL: string | null
@@ -109,6 +111,7 @@ export function useProfileView(): ProfileVM {
     return {
       ...shared,
       isTenant: true,
+      verified: Boolean(congregation.vify),
       name: congregation.name,
       email: congregation.admin_email,
       photoURL: congregation.photoUrl,
@@ -124,6 +127,7 @@ export function useProfileView(): ProfileVM {
   return {
     ...shared,
     isTenant: false,
+    verified: false,
     name: user?.displayName ?? 'Miembro',
     email: user?.email ?? null,
     photoURL: user?.photoURL ?? null,

@@ -1800,6 +1800,9 @@ A continuación se aplicaron todos los demás ítems bloqueantes e importantes.
 10. `src/supabase/rpcs/leaderCapabilities.sql`
 11. `src/supabase/rpcs/socialProfiles.sql`
 12. `src/supabase/rpcs/newsAnnouncements.sql`
+13. `src/supabase/rpcs/fixContactsScope.sql` (alcance de contactos por ministerio; ver 16.29)
+14. `src/supabase/rpcs/songbook.sql` (cancionero, flag `uses_songbook` y RPCs; ver 16.32)
+15. `src/supabase/rpcs/deleteCongregation.sql` (baja de miembros y de congregación; ver 16.33)
 
 **En una DB que ya existe NO correr `redil_schema.sql` entero** (no es
 idempotente): aplicar los cambios a mano. Antes de crear los índices únicos,
@@ -1925,6 +1928,9 @@ exists`, `create or replace`, `drop policy if exists` y `drop trigger if exists`
 4. `rpcs/fixListMembersEmail.sql` → `joinCongregation.sql` → `memberJoinFix.sql`
 5. `rpcs/getMyMembership.sql` → `leaderCapabilities.sql`
 6. `rpcs/socialProfiles.sql` → `newsAnnouncements.sql`
+7. `rpcs/fixContactsScope.sql` (alcance de contactos por ministerio; ver 16.29)
+8. `rpcs/songbook.sql` (cancionero, flag `uses_songbook` y RPCs; ver 16.32)
+9. `rpcs/deleteCongregation.sql` (baja de miembros y de congregación; ver 16.33)
 
 **Verificación sugerida después de correrlos:**
 
@@ -2232,7 +2238,7 @@ incrustadas en `dist/assets/*.js`.
      terminará redirigiendo a localhost con `ERR_CONNECTION_REFUSED`.
    - Redirect URLs: `https://<proyecto>.web.app/login` y
      `https://<proyecto>.firebaseapp.com/login`.
-3. Rotar el OAuth client si el secret estuvo expuesto.
+3. OAuth client: ya modificado por el usuario, sin rotación pendiente.
 4. Relogear la congregación con `nuevavida@gmail.com` (el token de prueba
    venció) y probar: Home, `/avisos`, `/miembros` → perfil de un miembro,
    ambos pickers de Unsplash y el login de miembro con Google.
@@ -2260,9 +2266,9 @@ desde la consola de Firebase Hosting.
 
 ---
 
-**Estado del deploy:** publicado una vez en Firebase Hosting. Queda pendiente
-subir el build de **16.22** (tarjeta Miembros y perfil de miembro), aplicar la
-config OAuth y re-ejecutar los dos SQL del 16.20.
+**Estado del deploy:** publicado en Firebase Hosting y con login Google
+verificado por el usuario (16.24 y 16.25). Sigue pendiente la auditoría en vivo
+de los grants del 16.20; el fix de contactos de 16.29 sí fue ejecutado.
 
 Además se actualizó `README.md`: la sección **Despliegue** ahora documenta
 Firebase Hosting/Spark con los comandos reales y deriva a esta guía (16.23)
@@ -2400,3 +2406,508 @@ sitio), abrir la PWA desde la pantalla de inicio del iPhone y revisar: que el
 logo de la topbar no quede bajo el notch, que la tabbar tenga fondo negro
 sólido al scrollear y que no haya saltos raros al desplazarse. Si sigue habiendo
 un problema, hace falta una captura y la pantalla exacta para afinar.
+
+### 16.26 Auditoría integral y métricas (2026-11-24)
+
+Se generó `docs/auditoria.html`: informe **autocontenido** (sin dependencias
+externas, imprime bien y sirve para abrir en cualquier navegador) con los siete
+ejes pedidos —seguridad, inicio de sesión, miembros del tenant, escalabilidad,
+código sucio, amplitud de archivos y rendimiento a 100.000 usuarios— más
+resumen ejecutivo, historial de lo hecho y metodología. Incluye tablas, flujos
+paso a paso, severidades y citas `archivo:línea`.
+
+**Aclaración de alcance:** «100.000 usuarios en simultáneo» se interpretó como
+**100.000 usuarios concurrentes activos**, no solo 100.000 cuentas registradas.
+El usuario aclaró además que la pregunta **no es si alcanza el plan de Supabase
+hoy**, sino si el código está preparado para esa concurrencia **sin romperse ni
+lagarse**. Por eso los límites de Spark/Free pasaron a ser contexto secundario
+y el veredicto del eje 7 es «código no preparado». Todas las proyecciones están
+marcadas como estimaciones: no se corrió prueba de carga ni se midió
+TTFB/latencia real.
+
+**Métricas medidas sobre el working directory:** 140 archivos TS/TSX · 11.361
+líneas · 28 archivos >100 líneas y 112 ≤100 · CSS 2.029 · SQL 2.856 (13
+archivos) · docs 2.639 (CONTEXTO + README) · 60 definiciones de función SQL · 7 policies · 54
+`GRANT` · 10 tablas · 11 índices · 9 triggers · 224 `export function` · 14
+`callRpc(` · 95 `useState(` · 28 `useEffect(` · 0 `TODO/FIXME` · 4 `console.`
+· 1 `eslint-disable` · 0 `any` explícito · 20 rutas · 0 tests. Build: `dist/`
+con 90 archivos / 1,82 MB y precache de 86 entradas (81 únicas) / ~1,45 MB.
+Nota: el conteo preliminar de 23 `TODO/FIXME` fue un falso positivo de una
+búsqueda sin distinción de mayúsculas que matcheó la palabra «todo»; con
+coincidencia exacta hay **0**.
+
+**Calidad de código:** no hay `any`, `@ts-ignore`, `TODO` ni `FIXME`; hay 1
+`eslint-disable` justificado y 4 `console.*`. La deuda es estructural: dos
+implementaciones de `callRpc` con distinto timeout/traducción de errores,
+tres formas de leer el token del tenant con distinta validación,
+`isTenant = Boolean(congregation)` repetido en 9 hooks, `initials()`
+triplicado, 5 vocabularios de roles, canales del `bump()` sin consumidores,
+`src/pages/*` legacy sin enlaces, `SyncBadge`/`useSettingsView`/`lib/backup`
+muertos, 3 motores de estilos, 2 librerías de iconos y sin scripts de
+`lint`/`test`/`format`. Si se cuenta CSS, son 29 archivos >100 líneas: los
+28 TS/TSX del informe más `src/styles.css`.
+
+**Cifras de referencia para el escalado (contexto, no veredicto):** 100.000 ×
+1,45 MB ≈ 145 GB de precache en una oleada, unas 403 veces los 360 MB/día del
+plan Spark; el cupo alcanza para ~248 instalaciones frías por día. Supabase
+Free/Nano: 500 MB de DB, 500 MB de RAM, CPU compartida, 5 GB de egress, 50k
+MAU, 60 conexiones directas y 200 clientes de pooler. Los límites se tomaron de
+la documentación oficial de Firebase y Supabase; se enlazan en la metodología
+del HTML. El bloqueante para el código es el fan-out de refetch, los listados
+completos y el precache que anula el code splitting, no el tamaño del plan.
+
+**Concordancia entre informes:** los 74 `SECURITY DEFINER` revisados tienen
+`set search_path`, pero 56 usan la forma no endurecida
+`set search_path = public, extensions` y 19 la endurecida. Respecto de
+`list_public_news`, los informes coinciden en que la función valida `vify`,
+`share_announcements` e `is_global` dentro del SQL: se reclasificó como
+**riesgo medio / decisión de producto** (acceso público deliberado), no como
+un bypass cross-tenant. La UI sigue usando `list_shared_announcements`, que sí
+exige sesión y `can_cross_tenants`.
+
+**Correcciones según el feedback del usuario (24/11/2026):** el usuario confirmó
+que **el login con Google funciona correctamente con el último deploy** y que
+**el OAuth client ya fue modificado y no presenta riesgo**. En consecuencia se
+sacaron del informe todas las referencias a login roto, OAuth en riesgo y
+deploy pendiente; el incidente de credenciales en la URL quedó solo como
+antecedente histórico. No se debe volver a listar como tareas: revocar/rotar el
+OAuth client, aplicar Site URL/Redirect URLs ni correr `npm run deploy`.
+
+**Acciones que siguen pendientes y están reflejadas en el informe:** revocar el
+token de tenant (`revoke_tenant_session`) y purgar `tenant_sessions`;
+corregir `newsAnnouncements.sql` (hoy revoca solo `from public`) y
+re-ejecutarlo junto con `socialProfiles.sql` con `revoke ... from public, anon`;
+quitar la escritura de `news` por RLS a
+líderes; alinear `list_leaders_congregation_members()` con
+`leads_ministry()` (el alcance de contactos ya se cerró en 16.29); corregir el
+bug de `toAppError()`/`isAuthSessionError()`
+(«venció» vs «vencid»); paginación, agregados, canales por entidad, precache
+mínimo y prueba de carga. El detalle con prioridades, responsables, plazos y
+criterios está en 16.28; el fix de contactos ejecutado está en 16.29.
+
+**Archivos tocados en esta ronda:** `docs/auditoria.html`, este documento y
+(el 24/11/2026, después de la ejecución en vivo) el nuevo
+`src/supabase/rpcs/fixContactsScope.sql`. No se modificó ningún archivo TS/TSX
+ni de configuración.
+
+### 16.27 Plan de refactoring: archivos ≤100 líneas (2026-11-24)
+
+El usuario pidió «un plan de refactoring para poder achicar la línea de
+archivos». Se agregó la sección 8 de `docs/auditoria.html` con fases y
+criterios de verificación:
+
+- **F0 · Preparación:** scripts `lint`/`test`/`format`, incluir `scripts/**` en
+  typecheck, unificar los 3 motores de estilos en Emotion y las 2 librerías de
+  iconos en `@mui/icons-material`.
+- **F1 · Código muerto:** borrar `src/pages/*` (7 archivos / 1.729 líneas),
+  `SyncBadge`, `useSettingsView`, `lib/backup` y `lib/api`. Es la mayor
+  reducción y la de menor riesgo porque las rutas usan `src/views/*`.
+- **F2 · Abstracciones compartidas:** un solo `callRpc` canónico, un
+  `requireToken()`, un `useSessionKind()`, un `initials()` y un mapa de roles.
+- **F3 · Vistas grandes:** partir `ProfileView` (262), `CalendarView` (196),
+  `DirectoryView` (189), `MembersView` (148) y `CodeView` (129) en componentes
+  + viewmodels, sin lógica de Supabase ni permisos en la vista.
+- **F4 · Componentes y utilidades:** `CongregationAccess` (304),
+  `QrScannerPanel`, `Layout`, `Icons`, `Modal`, `repo.ts`, `format.ts` y
+  `PWAProvider`; datos geo a un módulo de constantes.
+- **F5 · Cierre:** actualizar métricas y comentarios desactualizados.
+
+Regla de aceptación: todo archivo **tocado** queda en ≤100 líneas, con
+`npm run typecheck` limpio y sin cambios de comportamiento. La deuda
+preexistente no se reescribe entera de una vez: se documenta y se reduce por
+fases. El patrón a preservar es `ministryActions.ts` (decisión tenant/líder
+fuera de la vista).
+
+### 16.28 Plan de acción para estabilizar lo crítico (2026-11-24)
+
+El usuario pidió «crear un plan de acción para estabilizar lo crítico a medio o
+esperado». Se agregó la sección 9 de `docs/auditoria.html`: tabla con prioridad
+P0/P1/P2, responsable, plazo estimado, criterio de aceptación y estado.
+
+- **Cerrado por confirmación del usuario:** login Google con el último deploy y
+  OAuth client modificado sin riesgo.
+- **P0 pendiente:** revocación del token tenant y purga de sesiones; quitar
+  escritura de `news` por RLS; alinear roles de liderazgo; re-ejecutar los SQL
+  con `revoke ... from anon` y auditar grants en vivo; arreglar «venció» vs
+  «vencid».
+- **P1:** unificar `callRpc`/`requireToken`/`useSessionKind`, rate limit y
+  lockout, borrar código muerto, agregar CSP y headers, podar datos sensibles
+  de los docs.
+- **P2:** paginación + `get_tenant_counts()` + `get_member_profile()` +
+  índices con `EXPLAIN ANALYZE`; `bump()` por canal con SWR/dedupe/
+  `AbortController`; sync con jitter y `Retry-After`; precache mínimo, tests y
+  observabilidad. Cambiar de plan (Blaze/Pro) queda **al final**, solo si las
+  métricas lo justifican.
+
+Criterio de «estabilizado»: token tenant revocable, sin líder global con
+acceso cruzado, grants de `anon` auditados en la DB y expiración de sesión con
+el botón correcto. Recién después se mide robustez con prueba de carga.
+
+### 16.29 Alcance de contactos por ministerio y portabilidad a otro proyecto (2026-11-24)
+
+El usuario compartió el esquema real de la DB y ejecutó en Supabase el SQL
+reemplazante de `contacts_select` sin errores. Se guardó como
+`src/supabase/rpcs/fixContactsScope.sql` para que no quede solo en el chat.
+
+**Qué cambió:** `leads_user(user_id)` miraba `memberships.role` (el rol global),
+así que un `leader` de cualquier ministerio veía los contactos de todos los
+miembros de la congregación. La nueva función `leads_member_contact(p_user_id)`
+exige que el consultor sea `admin` de la congregación del dueño del contacto, o
+que compartan un ministerio donde el consultor tenga
+`ministry_members.ministry_role = 'leader'`. La policy quedó:
+
+```sql
+using (user_id = auth.uid() or public.leads_member_contact(user_id))
+```
+
+El esquema confirmó además que `memberships.user_id` es `Unique`, así que R1 sí
+está aplicada en vivo, y que `ministry_members` ya trae `congregation_id`,
+`ministry_id`, `membership_id` y `ministry_role`: suficiente para la consulta.
+
+**Inventario SQL en el repo:** 16 archivos (el esquema maestro
+`redil_schema.sql` más 15 en `rpcs/`). Del total, 15 entran en el orden de 16.18
+para DB nueva y `deployExistingDb.sql` se usa solo en el orden de 16.19 para DB
+existente. También están documentados el cierre de grants de 16.20 y la guía
+operativa de 16.23. `redil_schema.sql` **no es idempotente**: para una DB ya
+creada se usa `deployExistingDb.sql`.
+
+**Lo que NO está en el repo y por eso no se migra con SQL:**
+
+- El `.env` con la URL y la anon key del proyecto (ignorado por git; solo está
+  `.env.example`). Las `VITE_*` se incrustan en el bundle, así que hay que
+  recargar `.env` y correr `npm run build` de nuevo.
+- Las credenciales de Google OAuth: client ID/secret, Site URL y Redirect URLs
+  se configuran en Supabase Auth y Google Cloud Console, no se ejecutan.
+- Los datos: congregaciones, miembros, ministerios, avisos y eventos viven en
+  la DB, no en el repo. Hay que exportarlos e importarlos del proyecto viejo.
+- Un sistema de migraciones automático: hoy los scripts se pegan a mano en el
+  SQL Editor y en orden.
+
+**Para cambiar de proyecto:** crear el proyecto nuevo → ejecutar los 15 SQL en
+orden (16.18) → configurar OAuth y URLs → copiar `.env.example` a `.env` con la
+nueva URL y anon key → `npm run build` → `npm run deploy` → importar los datos.
+La estructura y los permisos se levantan solos; credenciales y contenido no.
+
+### 16.30 Overlay de carga global con spinner centrado (2026-11-24)
+
+El usuario pidió «un spinner de carga siempre al centro de la pantalla con un
+overlay blur que ocupe toda la pantalla». Confirmó que el alcance es la **carga
+global de la app**, no la de las listas.
+
+**Componente nuevo:** `src/components/LoadingOverlay.tsx`. Usa `Backdrop` de MUI
+con `inset: 0`, fondo `rgba(10, 5, 12, 0.68)`, `backdropFilter: blur(6px)` (y su
+prefijo `-webkit-` para iOS) y `zIndex: 9999`, por encima de la tabbar, los
+modales propios y los de MUI. El `CircularProgress` va dentro de un `Stack`
+centrado, con una etiqueta opcional (`Cargando…` por defecto) y
+`role="status"` / `aria-live="polite"`.
+
+**Puntos donde se reemplazó la carga global:**
+
+| Archivo | Antes | Ahora |
+| --- | --- | --- |
+| `src/app/AppRoutes.tsx` | `<div className="page">Cargando…</div>` (falta `authReady`) | `<LoadingOverlay />` |
+| `src/app/AppRoutes.tsx` | `<div className="page">Verificando sesión…</div>` (validación del token tenant) | `<LoadingOverlay label="Verificando sesión…" />` |
+| `src/app/AppRoutes.tsx` | `Suspense fallback={<LoadingList rows={4} />}` | `Suspense fallback={<LoadingOverlay />}` |
+| `src/app/MemberAccessGuard.tsx` | `<LoadingList rows={3} />` mientras carga la membresía (R7) | `<LoadingOverlay label="Verificando acceso…" />` |
+
+**Qué NO cambió en esa ronda:** los `LoadingList` in-place de vistas y páginas,
+los estados `saving`/`busy` de los formularios y las pantallas de error. El blur
+es el mismo patrón que ya usa `.modal-backdrop`; la restricción de iOS sobre
+`backdrop-filter` aplicaba a la topbar y la tabbar con fondo transparente, que
+siguen con fondo negro opaco. **Los `LoadingList` pasaron al overlay en 16.31.**
+
+**Archivos tocados:** el componente nuevo, `src/app/AppRoutes.tsx`,
+`src/app/MemberAccessGuard.tsx` y este documento. Ningún TS/TSX tocado supera
+las 100 líneas.
+
+### 16.31 Mostrar/ocultar contraseña y spinner en toda carga de datos (2026-11-24)
+
+El usuario pidió dos cosas: un *hide/show* para la contraseña en registro e
+inicio de sesión, y usar el spinner «en todo lugar donde tenga que cargar
+información».
+
+#### Contraseña visible u oculta
+
+**Componente nuevo:** `src/components/PasswordField.tsx` (51 líneas). Es un
+`TextField` con `type={visible ? 'text' : 'password'}` y un `IconButton` al final
+(`Visibility` / `VisibilityOff`) con `aria-label` acorde. El `onMouseDown`
+evita perder el foco al togglear. Acepta `label`, `value`, `onChange`,
+`autoComplete`, `required` y `helperText`.
+
+**Dónde se usa:**
+
+- `src/features/congregations/components/CongregationAccess.tsx`: login de la
+  congregación (`current-password`) y registro (`new-password`, mínimo 6). El
+  archivo pasó de 304 a 287 líneas.
+- `src/features/profile/components/ProfilePasswordForm.tsx`: «Nueva contraseña»
+  y «Repetir contraseña» del modal de Perfil.
+
+#### Spinner en toda carga de información
+
+En vez de editar una por una las ~20 pantallas, `LoadingList` (en
+`src/components/Feedback.tsx`, 90 líneas) dejó de dibujar skeletons y ahora
+**delega en `LoadingOverlay`**. Conserva el prop opcional `rows` para no romper
+las llamadas existentes; ya no se usa. Con eso todas las vistas que ya tenían
+un estado `loading` (directorio, avisos, eventos, ministerios, miembros,
+calendario, perfil, home, acceso, ajustes y las páginas legacy) muestran el
+mismo spinner centrado con blur.
+
+**Cargas que no pasaban por `LoadingList` y se agregaron aparte:**
+
+| Archivo | Estado | Overlay |
+| --- | --- | --- |
+| `src/features/congregations/components/CongregationAccess.tsx` | `loadingProvinces` / `loadingCities` | Se sacaron los `CircularProgress` inline de los selects |
+| `src/features/profile/components/UnsplashImagePicker.tsx` | `picker.loading` | «Buscando imágenes…» |
+| `src/lib/settings.tsx` | carga inicial de ajustes desde IndexedDB | «Cargando ajustes…» |
+| `src/views/DirectoryView.tsx` | `congregationsLoading` / `announcementsLoading` | «Cargando congregaciones…» / «Cargando avisos…» |
+
+**Qué sigue igual:** los estados `saving` / `busy` de guardar, borrar,
+sincronizar o publicar. Son operaciones de escritura, no carga de información,
+y mantienen el texto del botón («Guardando…», «Eliminando…», etc.). Tampoco se
+tocaron las pantallas de error ni el `busy` del login con Google, que es una
+redirección a OAuth.
+
+**Verificación:** `npm run typecheck` y `npm run build` sin errores. Archivos
+nuevos y modificados: 51 / 90 / 87 / 65 / 31 / 208 / 287 líneas; los de deuda
+preexistente (`DirectoryView` y `CongregationAccess`) no crecieron de forma
+significativa y el segundo incluso se achicó.
+
+### 16.32 Cancionero por congregación con cifrado privado por ministerio (2026-11-24)
+
+El usuario pidió un cancionero asociado a la congregación, visible para todos en
+su parte pública, con un uso especial dentro de los ministerios. Antes de
+escribir SQL se confirmaron cuatro decisiones:
+
+| Tema | Decisión |
+| --- | --- |
+| Visibilidad | Cualquiera ve **título, artista, tono original y letra sin cifrado**. Letra con acordes, colores y transposición quedan para miembros del ministerio habilitado (o admin del tenant). |
+| Vínculo | Columna `uses_songbook` en `ministries`, declarada **al crear el ministerio**. No hay tablas `songbooks` ni `ministry_songbooks`. |
+| Colores | **Paleta fija por nota** (12 colores de Redil, `src/features/songbook/lib/notes.ts`). No se replica onStage literalmente: su ayuda oficial indica un color elegido por persona para todos los acordes y otro para MD Notes, no un color por nota ([cifrado](https://help.getonstage.app/songs-and-library/songs-chords-lyrics/), [vista](https://help.getonstage.app/songs-and-library/songs-view-mode/), [tono del equipo](https://help.getonstage.app/songs-and-library/songs-change-key-team/)). El usuario eligió explícitamente «color por nota». |
+| Notación y tono | Alternancia **Americano** (`C`, `Dm`) / **Europeo** (`Do`, `Re m`). El cambio de tono es **global del ministerio**, no personal: lo aplica **solo** quien tiene `ministry_members.ministry_role = 'leader'` en ese ministerio. El admin del tenant administra canciones, pero **no** el tono. |
+
+#### Capa SQL
+
+**Archivo nuevo:** `src/supabase/rpcs/songbook.sql` (idempotente; se ejecuta
+después de `fixContactsScope.sql`, paso 14 en 16.18 y paso 8 en 16.19). Crea:
+
+- `songs` (por `congregation_id`): título, artista, `original_key`, `content`
+  en formato ChordPro (`[C]texto`) y timestamps.
+- `ministries.uses_songbook boolean not null default false` vía `add column if
+  not exists`.
+- `ministry_song_transpositions` (ministerio, canción, semitones -12..12) con
+  PK compuesta.
+- Helpers `songbook_is_member` / `songbook_is_leader` / `songbook_can_edit_ministry`.
+- `songbook_public_songs(cid)`: quita los corchetes con `regexp_replace` y es la
+  única lectura con grant a `anon`.
+- `songbook_ministry_songs(mid)`: exige `uses_songbook` y pertenencia; devuelve
+  el ChordPro completo más el semitono vigente.
+- `songbook_set_transpose(mid, sid, semitones)`: valida rango y exige **solo**
+  `ministry_role = 'leader'` del ministerio; `songbook_can_edit_ministry`
+  devuelve el mismo valor para ocultar el control en la UI.
+- `songbook_create_song` / `update` / `delete` y `songbook_set_ministry_usage`:
+  exigen token de congregación vigente (`tenant_from_token`).
+- `revoke ... from public` y `grant` explícitos: las escrituras y los RPCs con
+  cifrado quedan para `authenticated`; el catálogo público queda para `anon`.
+
+`create_tenant_ministry` **no cambió**: ya devuelve el `uuid` del ministerio. El
+alta con el checkbox llama después a `songbook_set_ministry_usage`; si el SQL todavía
+no se ejecutó, la creación del ministerio sigue funcionando y solo falla esa
+habitualización opcional. La validación de semitones se escribió con comparaciones
+explícitas (`< -12 or > 12`) para evitar dudas de precedencia con `is not true`.
+
+#### Capa frontend
+
+| Capa | Archivos |
+| --- | --- |
+| Modelo | `src/features/songbook/types.ts` (`SongSummary`, `SongSheetData`, `SongbookMinistry`, `SongInput`, `Notation`, segmentos de letra). |
+| Cifrado | `lib/notes.ts` (notas, colores y equivalencia europea) y `lib/chords.ts` (`chordParts`, `transposeChord`, `colorForChord`, `parseChordPro`). |
+| Servicios | `services/songbook.ts`: adapta los RPCs; las escrituras usan `requireToken()` y las lecturas `callRpc()` con timeout. |
+| Viewmodel | `hooks/useSongbook.ts`: resuelve el `congregation_id` (token, `?cid=`, código público o `getMyMembership()`), el ministerio activo, el alcance y las acciones. La vista no decide permisos. |
+| Componentes | `ChordChip`, `SongSheet`, `TransposeControl`, `SongList`, `MinistryPicker`, `SongFormDialog` y `PublicCongregationPicker`. |
+| Vista | `src/views/SongbookView.tsx`: repertorio a la izquierda, partitura a la derecha y diálogos de alta/edición y borrado. Es una vista pura. |
+
+**Cableado:** export en `src/app/lazyViews.ts`, ruta `/cancionero` en
+`AppRoutes.tsx` e ítem «Canciones» en `Layout.tsx` con el ícono `sparkles`
+(`IconName` no tiene `music`; `book` ya está usado por Biblia). Como la letra
+pública debe verse sin sesión, `/cancionero` queda fuera de `MemberAccessGuard`
+(pero dentro de `Layout`); `ProtectedRoute` solo saltea la validación de Auth y
+tenant para esa ruta. El visitante elige la congregación con el componente
+`PublicCongregationPicker` (usa `preview_congregation(p_code)`, ya existente) o
+con `?cid=<uuid>`; los usuarios con sesión no ven ese selector. El alta de
+ministerios pasó a incluir el checkbox «Usar
+el cancionero en este ministerio o grupo»: `MinistryCreateForm.tsx`,
+`useMinistryCrud.ts`, `MinistryActions.create`, `tenantMinistries.ts` y
+`MinistriesView.tsx`. El switch de `MinistryPicker` permite habilitar o quitar el
+flag después, solo para la congregación.
+
+**Comportamiento de la transposición:** `TransposeControl` muestra `−`, `+` y
+`Original` dentro de -12..12; los botones se deshabilitan para todos salvo el
+líder del ministerio seleccionado. `useSongbook` no habilita el control por tener
+sesión de congregación: `canEditTone` sale del RPC `songbook_can_edit_ministry`
+(que ya no admite bypass de admin) y `handleTranspose` vuelve a chequearlo antes
+de llamar. Así un cambio de tono nunca lo hace una persona cualquiera ni queda
+grabado por una sesión administrativa accidental. La notación es preferencia
+local de cada persona (`useState`, no se guarda en DB) y solo cambia cómo se
+muestran las notas; el color se calcula sobre la nota ya transitada.
+
+El usuario remarcó esta regla durante la implementación: «el único que puede
+cambiar el tono es el líder del ministerio, esto evita que varias personas
+cambien el tono de una canción y se almacene cosas equivocadas». Por eso se
+sacaron los dos accesos que la relajaban: el `is_admin()` en
+`songbook_is_leader` y el `canManage ||` en `canEditTone`. La UI de ministerios
+ya deja un solo líder a la vez (`handleLeader` baja al anterior a `member`).
+
+**Verificación:** `npm run typecheck` y `npm run build` sin errores; el bundle
+diferido `SongbookView` quedó en ~19 kB. Los TS/TSX nuevos tienen 19 a 99
+líneas (`SongbookView` 99, `useSongbook` 81, `AppRoutes` 94); los modificados
+siguen dentro del límite salvo `Layout.tsx` (132 líneas, deuda preexistente que
+no creció de forma relevante).
+
+**Pendiente del usuario:** ejecutar `src/supabase/rpcs/songbook.sql` en el SQL
+Editor. Hasta entonces `uses_songbook` no existe en vivo y las RPCs del
+cancionero devuelven `PGRST202`; el resto de la app sigue igual. No se publicó
+con `npm run deploy` en esta ronda.
+
+### 16.33 Baja física de miembros y de la congregación: «Dejar Redil» (2026-11-24)
+
+El usuario pidió dos RPC para borrar: un miembro del tenant y una congregación
+completa. Ante la duda sobre perfiles globales confirmó que en **los dos casos se
+borran también los usuarios de Supabase Auth**, no solo la vinculación. También
+pidió que el disparador esté **dentro del perfil del tenant** con una opción
+llamada **«Dejar Redil»**, y que se cablee en la UI existente.
+
+#### Capa SQL
+
+**Archivo nuevo:** `src/supabase/rpcs/deleteCongregation.sql` (idempotente; paso
+15 en 16.18 y paso 9 en 16.19; ejecuta después de `tenantAdmin.sql` porque usa
+`tenant_from_token`). Todas las funciones son `security definer` con
+`search_path` fijo, autorizadas solo por el token vigente de la congregación
+(no hay `auth.uid()` en esa sesión) y con una frase de confirmación exacta para
+evitar llamados accidentales.
+
+| RPC | Firma | Confirmación | Qué borra |
+| --- | --- | --- | --- |
+| `delete_tenant_member` | `(p_token uuid, p_user_id uuid, p_confirmation text)` | `ELIMINAR MIEMBRO` | `posts` / `news` / `events` creados por esa persona en este tenant, su `memberships`, sus `ministry_members`, `member_contacts`, `profiles` y `auth.users`. Valida antes que el usuario pertenezca a la congregación del token. |
+| `delete_congregation` | `(p_token uuid, p_confirmation text)` | `DEJAR REDIL` | Para cada miembro borra contacto, perfil y cuenta Auth; después borra `tenant_sessions` y la fila de `congregations`. El `on delete cascade` de esa fila barre ministerios, grupos, canciones, transposiciones, eventos, avisos y publicaciones. |
+
+`congregations.minister_id` queda en `null` automáticamente por su FK
+`on delete set null`. El orden dentro de `delete_tenant_member` importa: primero
+se borra el contenido filtrando por `author_id` / `created_by`, porque si se
+borrara el perfil primero esas columnas pasarían a `null` y ya no se podría
+filtrar. Los grants son explícitos: `revoke ... from public` y `grant ... to anon,
+authenticated` (el tenant llama con la anon key + token).
+
+**Advertencia documentada:** ambas operaciones son **irreversibles**. Borrar
+`auth.users` no se puede deshacer desde la app; la frase de confirmación es una
+segunda barrera además del `ConfirmDialog` de la UI.
+
+#### Capa frontend
+
+| Archivo | Rol |
+| --- | --- |
+| `src/features/congregations/services/tenantDeletion.ts` | Adapta los dos RPC con `requireToken()` y las frases exactas. La vista no conoce SQL. |
+| `src/features/congregations/components/DeleteMemberButton.tsx` | Botón «Eliminar de Redil» con `ConfirmDialog`; al confirmar vuelve a `/miembros`. Se muestra en `MemberProfileView` solo para el tenant. |
+| `src/features/congregations/components/LeaveRedilCard.tsx` | Zona de peligro en `ProfileView`: pide escribir `DEJAR REDIL`, llama al RPC, ejecuta `logout({ redirect: false })` y navega a `/login`. |
+| `src/views/ProfileView.tsx` y `src/views/MemberProfileView.tsx` | Solo renderizan los componentes; no toman decisiones de permisos. |
+
+La baja de un miembro se entra desde el listado de Miembros tocando su tarjeta y
+luego «Eliminar de Redil». La baja total se entra desde **Perfil → Dejar Redil**
+cuando hay sesión de congregación.
+
+**Verificación:** `npm run build` sin errores; los componentes nuevos tienen
+menos de 100 líneas. `ProfileView` ya era deuda preexistente y solo recibió dos
+líneas.
+
+**Pendiente del usuario:** ejecutar `src/supabase/rpcs/deleteCongregation.sql`
+en el SQL Editor. Probarlo primero con una congregación descartable: confirma
+que desaparezcan sus canciones y que los usuarios ya no puedan iniciar sesión.
+No se publicó con `npm run deploy` en esta ronda.
+
+### 16.34 Pantalla de espera por validación y tilde azul de congregación verificada (2026-11-24)
+
+El usuario pidió «cambiar el layout para cuando una congregación está pendiente
+de validación» y un «tilde azul, estilo Twitter» que indique que la cuenta de
+Redil de una congregación está validada. Como hoy `login_congregation` **no
+permite entrar** con `vify=false`, se confirmaron dos decisiones antes de
+escribir código:
+
+| Tema | Decisión |
+| --- | --- |
+| Congregación pendiente | **Pantalla de espera dedicada**, sin sesión y sin tocar SQL. El login sigue bloqueado como hasta ahora. Se descartó darle un token: `tenant_from_token` no filtra por `vify` y tendría acceso completo a los RPCs del tenant. |
+| Tilde azul | Solo en la **cabecera de la app** (topbar y sidebar) y en el **Perfil de la congregación**. Queda fuera del directorio y de los perfiles de miembros. |
+
+#### Estado de espera
+
+**Archivo nuevo:** `src/features/congregations/components/PendingValidationView.tsx`
+(63 líneas). Vista pura, sin Supabase ni decisiones de permisos: recibe el email
+del administrador y un callback `onBack`. Muestra el reloj, el texto «Tu
+congregación está en revisión», tres pasos (registro recibido → verificación de
+datos → acceso habilitado), un aviso de que no hace falta volver a registrar y
+un botón para volver al inicio.
+
+`CongregationAccess.tsx` pasó de 287 a 283 líneas: reemplaza el viejo
+`Dialog` de «Registro recibido» por esta vista y detecta el caso pendiente tanto
+al registrar como al intentar login. La detección es por mensaje
+(`/pendiente de validación|no está validada/i`) sobre `msj + detils` de
+`loginWithCongregation`; en ese caso no se setea el error rojo ni se crea sesión.
+`PrincipalView` no se tocó: el cambio de layout queda contenido en el flujo de
+congregación.
+
+#### Tilde azul
+
+**Archivo nuevo:** `src/components/VerifiedBadge.tsx` (20 líneas). Usa el ícono
+`Verified` de MUI con color fijo `#1d9bf0` (azul Twitter), `aria-label` y
+`Tooltip` accesible. Es el único lugar que define el color y el tamaño.
+
+| Archivo | Cambio |
+| --- | --- |
+| `src/features/profile/hooks/useSessionIdentity.ts` | Expone `verified: Boolean(congregation.vify)` para el tenant; `false` para miembros. |
+| `src/components/Layout.tsx` | Renderiza el badge junto al nombre en el sidebar y en la topbar, solo si `isTenant && verified`. |
+| `src/features/profile/hooks/useProfileView.ts` | Expone `verified` en `ProfileVM` con el mismo valor. |
+| `src/views/ProfileView.tsx` | Lo muestra al lado del nombre en la tarjeta, solo para el tenant. |
+
+La sesión de congregación ya persistía `vify` en `CongregationStore`, así que
+no hizo falta consultar la DB de nuevo: el badge aparece apenas entra el tenant
+verificado y desaparece con el logout. El estado `vify=false` solo se ve desde
+el login/registro, porque la app no acepta sesiones pendientes.
+
+**Verificación:** `npm run typecheck` y `npm run build` sin errores; el bundle
+de `PrincipalView` pasó de ~10,5 kB a ~11,7 kB y el de `ProfileView` de ~21,8 a
+~21,9 kB. Los archivos nuevos tienen 20 y 63 líneas. Los modificados ya eran
+deuda preexistente: `CongregationAccess` bajó a 283, `useSessionIdentity` 41,
+`useProfileView` 141, `Layout` 140 y `ProfileView` 269. **No se ejecutó SQL ni
+se publicó** con `npm run deploy` en esta ronda.
+
+### 16.35 Salida real de R7 cuando el login con Google fue un error (2026-11-24)
+
+El usuario reportó que al entrar con Google por error queda trabado en la
+pantalla de solicitud de código (R7): el storage guarda sus datos y el modal no
+tiene salida. Pidió reutilizar el «Volver» existente, pero con un `clear()` que
+permita volver a elegir entre Miembro y Congregación.
+
+#### Qué pasaba
+
+`AccessRequiredModal` es un `Dialog` sin `onClose` (a propósito: en MUI v9 no se
+cierra con Escape ni con backdrop). Su único «Volver» estaba dentro del modo
+`code` y solo hacía `setMode('choose')`, o sea volvía al selector de QR/código
+sin salir del modal. El guard de `MemberAccessGuard` redirige a `/acceso` a todo
+usuario autenticado sin membresía, así que no había forma de volver al login.
+
+#### Cambio
+
+| Archivo | Cambio |
+| --- | --- |
+| `src/features/congregations/components/AccessRequiredModal.tsx` | Nuevo prop `onExit: () => void`. Agrega una caption y un botón **«Volver al inicio»** siempre visible, fuera de los modos `choose`/`qr`/`code`. El «Volver» interno pasó a decir «Volver a opciones» para que no se confundan. Sigue siendo una vista pura: no importa Supabase. |
+| `src/views/AccessRequiredView.tsx` (54 líneas) | Define `handleExit()`: `await logout({ redirect: false })` y `navigate('/login', { replace: true })`. Pasa el handler como `onExit`. |
+| `src/supabase/login.ts` | `logout()` ahora hace también `localStorage.clear()` con try/catch, además de lo que ya hacía: `clearAuthSession()` (Auth + `user`), `clearTenantSession()` (token + contadores) y `clearAllData()` (IndexedDB: miembros, eventos, avisos y outbox). Es el mismo `logout` que usan el menú lateral y «Dejar Redil», así que no hay una segunda lógica de limpieza. |
+
+El barrido es explícito porque las keys que podían quedar son `user`,
+`redil-congregation`, `redil-stats` y los tokens de Supabase Auth. Después de
+`logout()` no hay usuario ni congregación en el store, así que `ProtectedRoute`
+también mandaría a `/login`; la navegación explícita solo evita un frame con la
+R7 vieja.
+
+**Verificación:** `npm run typecheck` y `npm run build` sin errores. El bundle
+de `AccessRequiredView` pasó de ~7,5 kB a ~8,0 kB. `AccessRequiredView` quedó en
+54 líneas; `AccessRequiredModal` en 133 (deuda preexistente, +10). No se tocó
+SQL ni se publicó con `npm run deploy`.

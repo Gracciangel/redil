@@ -1,8 +1,9 @@
-import { Navigate } from 'react-router-dom'
+import { Navigate, useNavigate } from 'react-router-dom'
 import { Box } from '@mui/material'
 import { LoadingList } from '@/components/Feedback'
 import { AccessRequiredModal } from '@/features/congregations/components/AccessRequiredModal'
 import { useMemberHome } from '@/features/members/hooks/useMemberHome'
+import { logout } from '@/supabase/login'
 import { useCongregationStore } from '@/store/CongregationStore'
 import '../principalView.css'
 
@@ -15,6 +16,13 @@ import '../principalView.css'
 export function AccessRequiredView() {
   const vm = useMemberHome()
   const congregation = useCongregationStore((s) => s.congregation)
+  const navigate = useNavigate()
+
+  async function handleExit() {
+    // logout ya limpia Auth, token de tenant y el storage local (IndexedDB).
+    await logout({ redirect: false })
+    navigate('/login', { replace: true })
+  }
 
   // R7 no aplica al dueño de casa: si cae acá, lo devolvemos a su Code.
   if (congregation) return <Navigate to="/code" replace />
@@ -39,6 +47,7 @@ export function AccessRequiredView() {
         error={vm.actionError}
         joinedCongregationId={vm.joinedCongregationId}
         membershipError={vm.membershipError}
+        onExit={() => void handleExit()}
       />
     </Box>
   )

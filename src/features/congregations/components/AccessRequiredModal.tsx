@@ -20,6 +20,8 @@ interface Props {
   error: string | null
   joinedCongregationId: string | null
   membershipError?: Error | null
+  /** Sale de R7: cierra sesión, limpia el storage y vuelve al login. */
+  onExit: () => void
 }
 
 /**
@@ -41,12 +43,13 @@ export function AccessRequiredModal({
   error,
   joinedCongregationId,
   membershipError,
+  onExit,
 }: Props) {
   const [mode, setMode] = useState<Mode>('choose')
 
   return (
     // Sin `onClose`, MUI v9 no cierra el diálogo con Escape ni con backdrop:
-    // la única salida es que exista la membresía (el padre desmonta la view).
+    // se sale con «Volver al inicio» (onExit) o cuando existe la membresía.
     <Dialog open fullWidth maxWidth="xs" aria-labelledby="access-required-title">
       <DialogTitle id="access-required-title" style={{
         textAlign:"center"
@@ -112,10 +115,17 @@ export function AccessRequiredModal({
                 joinedCongregationId={joinedCongregationId}
               />
               <Button startIcon={<ArrowBackIcon />} onClick={() => setMode('choose')} sx={{ alignSelf: 'flex-start' }}>
-                Volver
+                Volver a opciones
               </Button>
             </>
           )}
+
+          <Typography variant="caption" color="text.secondary" sx={{ textAlign: 'center' }}>
+            ¿Entraste con la cuenta equivocada? Volvé al inicio para elegir otro acceso.
+          </Typography>
+          <Button startIcon={<ArrowBackIcon />} onClick={onExit} size="small" color="inherit" sx={{ alignSelf: 'center' }}>
+            Volver al inicio
+          </Button>
         </Stack>
       </DialogContent>
     </Dialog>

@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { Alert, Box, Button, CircularProgress, ImageList, ImageListItem, Stack, TextField, Typography } from '@mui/material'
+import { Alert, Box, Button, ImageList, ImageListItem, Stack, TextField, Typography } from '@mui/material'
+import { LoadingOverlay } from '@/components/LoadingOverlay'
 import { useUnsplashPicker } from '../hooks/useUnsplashPicker'
 import type { UnsplashPhoto, UnsplashVariant } from '../services/unsplash'
 
@@ -66,9 +67,8 @@ export function UnsplashImagePicker({ variant, value, onSelect, autoFocus }: Pro
             <Button variant="outlined" onClick={picker.search} disabled={picker.loading}>Buscar</Button>
           </Stack>
           {picker.error && <Alert severity="error">{picker.error}</Alert>}
-          {picker.loading ? (
-            <CircularProgress size={26} />
-          ) : (
+          {picker.loading && <LoadingOverlay label="Buscando imágenes…" />}
+          {!picker.loading && (
             <ImageList cols={3} gap={8} sx={{ m: 0, maxHeight: 210, overflowY: 'auto' }}>
               {picker.photos.map((photo) => (
                 <ImageListItem

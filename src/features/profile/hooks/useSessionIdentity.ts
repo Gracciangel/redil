@@ -7,6 +7,8 @@ export interface SessionIdentity {
   /** Texto secundario opcional (email del administrador del tenant). */
   caption: string | null
   isTenant: boolean
+  /** vify de la congregación: habilita el tilde azul verificada. */
+  verified: boolean
 }
 
 /**
@@ -25,6 +27,7 @@ export function useSessionIdentity(): SessionIdentity {
       displayName: congregation.name || 'Mi congregación',
       caption: congregation.admin_email,
       isTenant: true,
+      verified: Boolean(congregation.vify),
     }
   }
 
@@ -33,5 +36,6 @@ export function useSessionIdentity(): SessionIdentity {
     displayName: memberName || 'Miembro',
     caption: null,
     isTenant: false,
+    verified: false,
   }
 }

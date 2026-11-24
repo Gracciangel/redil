@@ -1,7 +1,7 @@
 import { Suspense, useEffect, useState } from 'react'
-import { Navigate, Outlet, Route, Routes } from 'react-router-dom'
-import { LoadingList } from '@/components/Feedback'
+import { Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom'
 import { Layout } from '@/components/Layout'
+import { LoadingOverlay } from '@/components/LoadingOverlay'
 import { TenantSessionAlert } from '@/features/congregations/components/TenantSessionAlert'
 import { validateCongregationSession } from '@/supabase/login'
 import { isSessionExpired, useCongregationStore } from '@/store/CongregationStore'
@@ -10,13 +10,17 @@ import { MemberAccessGuard } from './MemberAccessGuard'
 import {
   AccessRequiredView, AnnouncementsView, BibleView, CalendarView, CodeView,
   CongregationHomeView, DashboardView, DirectoryView, EventsView, MemberHomeView,
-  MemberProfileView, MembersView, MinistriesView, NotFoundView, PrincipalView, ProfileView, SettingsView,
+  MemberProfileView, MembersView, MinistriesView, NotFoundView, PrincipalView, ProfileView,
+  SettingsView, SongbookView,
 } from './lazyViews'
 
 function ProtectedRoute() {
   const user = useUserStore((s) => s.user)
   const authReady = useUserStore((s) => s.authReady)
   const congregation = useCongregationStore((s) => s.congregation)
+  const location = useLocation()
+  // El cancionero público (título y letra) se abre sin sesión.
+  const isPublicSongbook = location.pathname === '/cancionero'
   const [tenantReady, setTenantReady] = useState(!congregation)
 
   useEffect(() => {
@@ -30,11 +34,11 @@ function ProtectedRoute() {
     return () => { alive = false }
   }, [congregation])
 
-  if (congregation && !tenantReady) return <div className="page">Verificando sesión…</div>
-  if (!congregation && !authReady) return <div className="page">Cargando…</div>
-  if (!user && !congregation) return <Navigate to="/login" replace />
+  if (!isPublicSongbook && congregation && !tenantReady) return <LoadingOverlay label="Verificando sesión…" />
+  if (!isPublicSongbook && !congregation && !authReady) return <LoadingOverlay label="Cargando…" />
+  if (!isPublicSongbook && !user && !congregation) return <Navigate to="/login" replace />
 
-  return <><TenantSessionAlert /><Outlet /></>
+  return <>{!isPublicSongbook && <TenantSessionAlert />}<Outlet /></>
 }
 
 function LoginRoute() {
@@ -48,13 +52,18 @@ function LoginRoute() {
 
 export function AppRoutes() {
   return (
-    <Suspense fallback={<LoadingList rows={4} />}>
+    <Suspense fallback={<LoadingOverlay label="Cargando…" />}>
       <Routes>
         <Route path="/login" element={<LoginRoute />} />
 
         <Route element={<ProtectedRoute />}>
           {/* R7: sin Layout, para que el modal sea la única UI visible. */}
           <Route path="acceso" element={<AccessRequiredView />} />
+
+          {/* Público: título y letra sin cifrado; sin guard de membresía. */}
+          <Route element={<Layout />}>
+            <Route path="cancionero" element={<SongbookView />} />
+          </Route>
 
           <Route element={<MemberAccessGuard />}>
             <Route element={<Layout />}>

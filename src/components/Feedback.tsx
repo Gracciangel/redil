@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { Icon, type IconName } from './Icons'
+import { LoadingOverlay } from './LoadingOverlay'
 
 export function Field({
   label,
@@ -67,20 +68,13 @@ export function EmptyState({
   )
 }
 
-export function LoadingList({ rows = 3 }: { rows?: number }) {
-  return (
-    <div className="skeleton-list" aria-label="Cargando" role="status">
-      {Array.from({ length: rows }, (_, index) => (
-        <div className="skeleton-row" key={index}>
-          <span className="skeleton-avatar" />
-          <span className="skeleton-lines">
-            <span className="skeleton-line skeleton-line-lg" />
-            <span className="skeleton-line skeleton-line-sm" />
-          </span>
-        </div>
-      ))}
-    </div>
-  )
+/**
+ * Compatibilidad: antes dibujaba skeletons en el lugar. Ahora delega en el
+ * overlay global para que toda carga de información use el mismo spinner.
+ * `rows` se conserva para no tocar cada llamada; ya no se usa.
+ */
+export function LoadingList(_props: { rows?: number } = {}) {
+  return <LoadingOverlay />
 }
 
 export function ErrorState({ message }: { message: string }) {

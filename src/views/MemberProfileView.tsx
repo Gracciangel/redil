@@ -2,6 +2,7 @@ import { Link as RouterLink, useParams } from 'react-router-dom'
 import { Avatar, Box, Button, Chip, Paper, Stack, Typography } from '@mui/material'
 import ArrowBackOutlinedIcon from '@mui/icons-material/ArrowBackOutlined'
 import { EmptyState, ErrorState, LoadingList } from '@/components/Feedback'
+import { DeleteMemberButton } from '@/features/congregations/components/DeleteMemberButton'
 import { EntityIcon } from '@/features/congregations/components/EntityIcon'
 import { RoleBadge } from '@/features/congregations/components/RoleBadge'
 import { useMemberProfileView } from '@/features/social/hooks/useMemberProfileView'
@@ -69,6 +70,8 @@ export function MemberProfileView() {
           )}
         </Box>
       </Paper>
+
+      {vm.isTenant && <DeleteMemberButton userId={profile.userId} name={fullName} />}
     </Box>
   )
 }

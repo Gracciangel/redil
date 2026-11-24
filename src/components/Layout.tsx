@@ -8,6 +8,7 @@ import { TbLogout2 } from "react-icons/tb";
 import { UpdateToast } from './UpdateToast'
 import { logout } from '@/supabase/login'
 import { useCongregationStore } from '@/store/CongregationStore'
+import { VerifiedBadge } from './VerifiedBadge'
 
 interface NavItem {
   to: string
@@ -29,6 +30,7 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/ajustes', label: 'Ajustes', icon: 'settings' },
   { to: '/biblia', label: 'Biblia', icon: 'book' },
   { to: '/calendario', label: 'Calendario', icon: 'calendar' },
+  { to: '/cancionero', label: 'Canciones', icon: 'sparkles' },
   { to: '/code', label: 'Code', icon: 'qr', tenantOnly: true },
 ]
 
@@ -38,6 +40,7 @@ export function Layout() {
   const location = useLocation()
   const congregation = useCongregationStore((s) => s.congregation)
   const navItems = NAV_ITEMS.filter((item) => !item.tenantOnly || congregation)
+  const verified = identity.isTenant && identity.verified
 
   return (
     <div className="app-shell">
@@ -50,7 +53,10 @@ export function Layout() {
           <img src="/icons/brand-mark.png" alt="" className="brand-mark" width={36} height={36} />
           <span className="brand-text">
             <strong>Redil</strong>
-            <small title={identity.caption ?? identity.displayName}>{identity.displayName}</small>
+            <small title={identity.caption ?? identity.displayName} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              {identity.displayName}
+              {verified && <VerifiedBadge size={13} />}
+            </small>
           </span>
         </Link>
 
@@ -83,7 +89,10 @@ export function Layout() {
         <header className="topbar">
           <Link to="/" className="topbar-brand">
             <img src="/icons/brand-mark.png" alt="" width={30} height={30} />
-            <strong>{identity.displayName}</strong>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              <strong>{identity.displayName}</strong>
+              {verified && <VerifiedBadge size={16} />}
+            </span>
           </Link>
           <div className="topbar-actions">
             {canInstall && (

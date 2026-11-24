@@ -31,9 +31,11 @@ export function MinistriesView() {
             <MinistryCreateForm
               name={vm.newName}
               isGroup={vm.newIsGroup}
+              usesSongbook={vm.newUsesSongbook}
               busy={vm.busy}
               onName={vm.setNewName}
               onIsGroup={vm.setNewIsGroup}
+              onUsesSongbook={vm.setNewUsesSongbook}
               onSubmit={vm.handleCreate}
             />
           )}

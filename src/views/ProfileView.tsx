@@ -20,7 +20,9 @@ import EditOutlinedIcon from '@mui/icons-material/EditOutlined'
 import PhotoCameraOutlinedIcon from '@mui/icons-material/PhotoCameraOutlined'
 import PublicIcon from '@mui/icons-material/Public'
 import { LoadingList } from '@/components/Feedback'
+import { VerifiedBadge } from '@/components/VerifiedBadge'
 import { EntityIcon } from '@/features/congregations/components/EntityIcon'
+import { LeaveRedilCard } from '@/features/congregations/components/LeaveRedilCard'
 import { TenantSessionAlert } from '@/features/congregations/components/TenantSessionAlert'
 import { ProfileCongregationLine } from '@/features/profile/components/ProfileCongregationLine'
 import { ProfileEditDialog } from '@/features/profile/components/ProfileEditDialog'
@@ -113,7 +115,10 @@ export function ProfileView() {
           </Box>
 
           <Box sx={{ minWidth: 0, pb: 0.5 }}>
-            <Typography variant="h5" sx={{ fontWeight: 700 }}>{vm.name}</Typography>
+            <Typography variant="h5" sx={{ fontWeight: 700, display: 'flex', alignItems: 'center', gap: 0.75 }}>
+              {vm.name}
+              {vm.verified && <VerifiedBadge size={20} />}
+            </Typography>
             {vm.email && <Typography color="text.secondary">{vm.email}</Typography>}
             {vm.isTenant ? (
               <Typography variant="caption" color="text.secondary">Congregación</Typography>
@@ -255,6 +260,8 @@ export function ProfileView() {
           </Button>
         </Paper>
       )}
+
+      {vm.isTenant && <LeaveRedilCard />}
 
       <ProfileEditDialog vm={editor} />
     </Box>

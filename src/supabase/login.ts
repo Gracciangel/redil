@@ -95,6 +95,8 @@ export async function validateCongregationSession(): Promise<boolean> {
 export const logout = async ({ redirect = true }: { redirect?: boolean } = {}): Promise<void> => {
   await clearAuthSession()
   clearTenantSession()
+  // Barrido final: por si quedó alguna clave vieja de sesiones anteriores.
+  try { localStorage.clear() } catch (error) { console.warn('[auth] localStorage:', error) }
   try { await clearAllData() } catch (error) { console.warn('[auth] IndexedDB:', error) }
   if (redirect && window.location.pathname !== '/login') window.location.assign('/login')
 }

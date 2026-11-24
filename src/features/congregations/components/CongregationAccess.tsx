@@ -1,8 +1,11 @@
 import { useMemo, useState, type FormEvent } from 'react'
-import { Alert, Box, Button, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, MenuItem, Stack, Tab, Tabs, TextField, Typography } from '@mui/material'
+import { Alert, Box, Button, MenuItem, Stack, Tab, Tabs, TextField, Typography } from '@mui/material'
+import { LoadingOverlay } from '@/components/LoadingOverlay'
+import { PasswordField } from '@/components/PasswordField'
 import type { ICongregation } from '@/interfaces/ICongregation'
 import { loginWithCongregation } from '@/supabase/login'
 import { createCongregation } from '../services/congregations'
+import { PendingValidationView } from './PendingValidationView'
 import { LATAM_COUNTRIES, useCountryProvinces, useProvinceCities } from '../hooks/useLatinAmericaLocations'
 
 function slugify(value: string) {
@@ -28,7 +31,7 @@ export function CongregationAccess({ onSuccess, onTabChange, onLoginSuccess }: P
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
-  const [successModalOpen, setSuccessModalOpen] = useState(false)
+  const [pendingEmail, setPendingEmail] = useState<string | null>(null)
 
   const [adminUser, setAdminUser] = useState('')
   const [adminPassword, setAdminPassword] = useState('')
@@ -51,6 +54,11 @@ export function CongregationAccess({ onSuccess, onTabChange, onLoginSuccess }: P
     try {
       const result = await loginWithCongregation(adminUser, adminPassword)
       if (result.error) {
+        const detail = `${result.msj} ${result.detils ?? ''}`
+        if (/pendiente de validación|no está validada/i.test(detail)) {
+          setPendingEmail(adminUser.trim())
+          return
+        }
         setError(result.detils ? `${result.msj} ${result.detils}` : result.msj)
       } else {
         setNotice(result.msj || 'Sesión iniciada correctamente.')
@@ -92,7 +100,7 @@ export function CongregationAccess({ onSuccess, onTabChange, onLoginSuccess }: P
         adminEmail: email,
         password,
       })
-      setSuccessModalOpen(true)
+      setPendingEmail(email)
       onSuccess?.('Congregación registrada, pendiente de validación.')
       setForm({ name: '', slug: '', country: '', city: '', address: '' })
       setProvince('')
@@ -106,8 +114,14 @@ export function CongregationAccess({ onSuccess, onTabChange, onLoginSuccess }: P
     }
   }
 
+  if (pendingEmail) {
+    return <PendingValidationView email={pendingEmail} onBack={() => setPendingEmail(null)} />
+  }
+
   return (
     <Box sx={{ width: '100%', maxWidth: 520 }}>
+      {loadingProvinces && <LoadingOverlay label="Cargando provincias…" />}
+      {loadingCities && <LoadingOverlay label="Cargando ciudades…" />}
       <Tabs
         value={tab}
         onChange={(_, v) => {
@@ -141,14 +155,9 @@ export function CongregationAccess({ onSuccess, onTabChange, onLoginSuccess }: P
                 autoComplete="username"
                 fullWidth
               />
-              <TextField
-                size="small"
-                label="Contraseña"
-                type="password"
-                value={adminPassword}
-                onChange={(e) => setAdminPassword(e.target.value)}
-                autoComplete="current-password"
-                fullWidth
+              <PasswordField
+                label="Contraseña" value={adminPassword}
+                onChange={setAdminPassword} autoComplete="current-password"
               />
               <Button type="submit" variant="contained" size="small" disabled={busy}>
                 {busy ? 'Ingresando…' : 'Entrar como admin'}
@@ -213,14 +222,9 @@ export function CongregationAccess({ onSuccess, onTabChange, onLoginSuccess }: P
                   required
                   fullWidth
                   disabled={!form.country || loadingProvinces}
-                  helperText={provincesError || (loadingProvinces ? 'Cargando provincias…' : '')}
-                  slotProps={{
-                    input: {
-                      endAdornment: loadingProvinces ? <CircularProgress color="inherit" size={16} sx={{ mr: 2 }} /> : undefined,
-                    },
-                  }}
+                  helperText={provincesError}
                 >
-                  <MenuItem value="">{loadingProvinces ? 'Cargando…' : 'Seleccioná una provincia'}</MenuItem>
+                  <MenuItem value="">Seleccioná una provincia</MenuItem>
                   {provinces.map((p) => (
                     <MenuItem key={p} value={p}>{p}</MenuItem>
                   ))}
@@ -235,14 +239,9 @@ export function CongregationAccess({ onSuccess, onTabChange, onLoginSuccess }: P
                   required
                   fullWidth
                   disabled={!province || loadingCities}
-                  helperText={citiesError || (loadingCities ? 'Cargando ciudades…' : '')}
-                  slotProps={{
-                    input: {
-                      endAdornment: loadingCities ? <CircularProgress color="inherit" size={16} sx={{ mr: 2 }} /> : undefined,
-                    },
-                  }}
+                  helperText={citiesError}
                 >
-                  <MenuItem value="">{loadingCities ? 'Cargando…' : 'Seleccioná una ciudad'}</MenuItem>
+                  <MenuItem value="">Seleccioná una ciudad</MenuItem>
                   {cities.map((city) => (
                     <MenuItem key={city} value={city}>{city}</MenuItem>
                   ))}
@@ -266,16 +265,10 @@ export function CongregationAccess({ onSuccess, onTabChange, onLoginSuccess }: P
                 required
                 fullWidth
               />
-              <TextField
-                size="small"
-                label="Contraseña"
-                type="password"
-                value={registerPassword}
-                onChange={(e) => setRegisterPassword(e.target.value)}
-                autoComplete="new-password"
-                required
-                fullWidth
-                helperText="Mínimo 6 caracteres."
+              <PasswordField
+                label="Contraseña" value={registerPassword}
+                onChange={setRegisterPassword} autoComplete="new-password"
+                required helperText="Mínimo 6 caracteres."
               />
               <Button type="submit" variant="contained" size="small" disabled={busy}>
                 {busy ? 'Registrando…' : 'Registrar congregación'}
@@ -285,20 +278,6 @@ export function CongregationAccess({ onSuccess, onTabChange, onLoginSuccess }: P
           </Box>
         )}
       </Box>
-
-      <Dialog open={successModalOpen} onClose={() => setSuccessModalOpen(false)} fullWidth maxWidth="xs">
-        <DialogTitle>Registro recibido</DialogTitle>
-        <DialogContent>
-          <Typography variant="body2">
-            Congregación registrada, vamos a contactarnos con el administrador para verificar la cuenta. Mientras tanto no podrás iniciar sesión.
-          </Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setSuccessModalOpen(false)} variant="contained" autoFocus>
-            Aceptar
-          </Button>
-        </DialogActions>
-      </Dialog>
     </Box>
   )
 }

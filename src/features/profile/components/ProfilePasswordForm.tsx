@@ -1,4 +1,5 @@
-import { Box, Button, Stack, TextField, Typography } from '@mui/material'
+import { Box, Button, Stack, Typography } from '@mui/material'
+import { PasswordField } from '@/components/PasswordField'
 import type { ProfileEditorVM } from '../hooks/useProfileEditor'
 
 interface Props {
@@ -13,13 +14,13 @@ export function ProfilePasswordForm({ vm }: Props) {
         <Typography variant="body2" color="text.secondary">
           Mínimo 6 caracteres. Usá una contraseña que no uses en otros sitios.
         </Typography>
-        <TextField
-          label="Nueva contraseña" type="password" size="small" value={vm.password}
-          onChange={(event) => vm.setPassword(event.target.value)} autoComplete="new-password" fullWidth
+        <PasswordField
+          label="Nueva contraseña" value={vm.password}
+          onChange={vm.setPassword} autoComplete="new-password"
         />
-        <TextField
-          label="Repetir contraseña" type="password" size="small" value={vm.confirmPassword}
-          onChange={(event) => vm.setConfirmPassword(event.target.value)} autoComplete="new-password" fullWidth
+        <PasswordField
+          label="Repetir contraseña" value={vm.confirmPassword}
+          onChange={vm.setConfirmPassword} autoComplete="new-password"
         />
         <Button type="submit" variant="contained" disabled={vm.busy === 'password'}>
           {vm.busy === 'password' ? 'Actualizando…' : 'Actualizar contraseña'}

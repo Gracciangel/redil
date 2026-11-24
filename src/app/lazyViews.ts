@@ -52,3 +52,6 @@ export const MinistriesView = lazy(() =>
 export const DirectoryView = lazy(() =>
   import('@/views/DirectoryView').then((m) => ({ default: m.DirectoryView })),
 )
+export const SongbookView = lazy(() =>
+  import('@/views/SongbookView').then((m) => ({ default: m.SongbookView })),
+)

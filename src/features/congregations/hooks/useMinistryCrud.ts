@@ -11,6 +11,7 @@ export function useMinistryCrud(isTenant: boolean) {
 
   const [newName, setNewName] = useState('')
   const [newIsGroup, setNewIsGroup] = useState(false)
+  const [newUsesSongbook, setNewUsesSongbook] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editName, setEditName] = useState('')
   const [editIsGroup, setEditIsGroup] = useState(false)
@@ -33,8 +34,9 @@ export function useMinistryCrud(isTenant: boolean) {
     event.preventDefault()
     if (!newName.trim()) return
     void run('create', async () => {
-      await actions.create(newName.trim(), newIsGroup)
+      await actions.create(newName.trim(), newIsGroup, newUsesSongbook)
       setNewName('')
+      setNewUsesSongbook(false)
     }, newIsGroup ? 'Grupo creado.' : 'Ministerio creado.')
   }
 
@@ -85,7 +87,7 @@ export function useMinistryCrud(isTenant: boolean) {
 
   return {
     notice, busy,
-    newName, setNewName, newIsGroup, setNewIsGroup,
+    newName, setNewName, newIsGroup, setNewIsGroup, newUsesSongbook, setNewUsesSongbook,
     editingId, editName, setEditName, editIsGroup, setEditIsGroup, editIcon, setEditIcon,
     confirmDelete, setConfirmDelete,
     openEdit, closeEdit, handleCreate, handleSave, handleDelete,

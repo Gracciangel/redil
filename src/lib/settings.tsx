@@ -7,6 +7,7 @@ import {
   useState,
   type ReactNode,
 } from 'react'
+import { LoadingOverlay } from '@/components/LoadingOverlay'
 import { DEFAULT_SETTINGS, loadSettings, saveSettings } from './repo'
 import type { AppSettings } from './types'
 
@@ -49,7 +50,12 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     [settings, loading, save],
   )
 
-  return <SettingsContext.Provider value={value}>{children}</SettingsContext.Provider>
+  return (
+    <SettingsContext.Provider value={value}>
+      {loading && <LoadingOverlay label="Cargando ajustes…" />}
+      {children}
+    </SettingsContext.Provider>
+  )
 }
 
 export function useSettings(): SettingsContextValue {

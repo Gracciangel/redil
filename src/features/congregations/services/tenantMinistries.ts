@@ -31,10 +31,17 @@ export async function listTenantMinistries(): Promise<CongregationMinistry[]> {
   }))
 }
 
-export async function createTenantMinistry(name: string, isGroup: boolean): Promise<void> {
-  await callRpc('create_tenant_ministry', {
+export async function createTenantMinistry(
+  name: string, isGroup: boolean, usesSongbook = false,
+): Promise<void> {
+  const ministryId = await callRpc<string>('create_tenant_ministry', {
     p_token: requireToken(), p_name: name, p_is_group: isGroup,
   })
+  if (usesSongbook && ministryId) {
+    await callRpc('songbook_set_ministry_usage', {
+      p_token: requireToken(), p_ministry_id: ministryId, p_enabled: true,
+    })
+  }
 }
 
 export async function deleteTenantMinistry(ministryId: string): Promise<void> {

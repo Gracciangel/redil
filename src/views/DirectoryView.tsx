@@ -1,5 +1,6 @@
 import { Alert, Avatar, Box, Button, Chip, Grid, MenuItem, Paper, Stack, TextField, Typography } from '@mui/material'
 import { LoadingList } from '@/components/Feedback'
+import { LoadingOverlay } from '@/components/LoadingOverlay'
 import { EntityIcon } from '@/features/congregations/components/EntityIcon'
 import { RoleBadge } from '@/features/congregations/components/RoleBadge'
 import { ProfileCongregationLine } from '@/features/profile/components/ProfileCongregationLine'
@@ -69,6 +70,8 @@ export function DirectoryView() {
 
   return (
     <Box>
+      {vm.verified && vm.congregationsLoading && <LoadingOverlay label="Cargando congregaciones…" />}
+      {Boolean(vm.selectedId) && vm.announcementsLoading && <LoadingOverlay label="Cargando avisos…" />}
       <Stack sx={{ mb: 2 }}>
         <Typography variant="overline" color="primary.main" sx={{ fontWeight: 700, letterSpacing: '0.14em' }}>
           Red de Redil

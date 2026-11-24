@@ -20,7 +20,7 @@ import {
  * Así la vista y el viewmodel no tienen que decidir permisos.
  */
 export interface MinistryActions {
-  create(name: string, isGroup: boolean): Promise<void>
+  create(name: string, isGroup: boolean, usesSongbook: boolean): Promise<void>
   update(id: string, name: string, isGroup: boolean, icon: string | null): Promise<void>
   remove(id: string): Promise<void>
   addMember(id: string, userId: string): Promise<void>
@@ -31,7 +31,7 @@ export interface MinistryActions {
 export function ministryActions(isTenant: boolean): MinistryActions {
   if (isTenant) {
     return {
-      create: (name, isGroup) => createTenantMinistry(name, isGroup),
+      create: (name, isGroup, usesSongbook) => createTenantMinistry(name, isGroup, usesSongbook),
       update: (id, name, isGroup, icon) => updateTenantMinistry(id, name, isGroup, icon),
       remove: (id) => deleteTenantMinistry(id),
       addMember: (id, userId) => assignMemberToMinistry(id, userId),

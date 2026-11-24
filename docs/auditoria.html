@@ -1,0 +1,953 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Redil — Auditoría integral y métricas</title>
+<style>
+  :root {
+    --bg: #0b0910; --panel: #171320; --panel-2: #1e1829;
+    --line: #302840; --ink: #f4eef8; --muted: #b8a9c4;
+    --brand: #c084fc; --brand-2: #ead6ff; --ok: #4ade80; --warn: #fbbf24;
+    --high: #fb923c; --crit: #f87171; --info: #93c5fd;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 15px/1.55 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  a { color: var(--brand-2); }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 0 24px 90px; }
+  header.hero {
+    padding: 56px 24px 34px; border-bottom: 1px solid var(--line);
+    background: radial-gradient(1000px 420px at 80% -10%, rgba(192,132,252,.22), transparent 70%), var(--bg);
+  }
+  header.hero .wrap { padding-bottom: 0; }
+  .eyebrow { color: var(--brand); font-weight: 700; letter-spacing: .18em; font-size: 12px; text-transform: uppercase; }
+  h1 { font-size: clamp(30px, 5vw, 48px); line-height: 1.1; margin: 10px 0 12px; letter-spacing: -.03em; }
+  h2 { font-size: 27px; margin: 0 0 16px; letter-spacing: -.02em; }
+  h3 { font-size: 18px; margin: 28px 0 12px; color: var(--brand-2); }
+  h4 { font-size: 15px; margin: 20px 0 8px; }
+  p { margin: 0 0 12px; color: var(--muted); }
+  .lead { font-size: 17px; max-width: 820px; }
+  .meta { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 22px; }
+  .pill {
+    border: 1px solid var(--line); background: var(--panel); color: var(--muted);
+    border-radius: 999px; padding: 5px 13px; font-size: 12px;
+  }
+  .pill b { color: var(--ink); }
+  nav.toc {
+    position: sticky; top: 0; z-index: 20; background: rgba(11,9,16,.94);
+    border-bottom: 1px solid var(--line); backdrop-filter: blur(10px);
+  }
+  nav.toc .wrap { padding-top: 12px; padding-bottom: 12px; display: flex; gap: 6px; flex-wrap: wrap; }
+  nav.toc a {
+    font-size: 12.5px; text-decoration: none; color: var(--muted);
+    padding: 6px 10px; border-radius: 8px; border: 1px solid transparent;
+  }
+  nav.toc a:hover { color: var(--ink); border-color: var(--line); background: var(--panel); }
+  section { padding-top: 48px; scroll-margin-top: 60px; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px,1fr)); gap: 12px; margin: 20px 0 10px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 16px; }
+  .card .k { font-size: 11px; text-transform: uppercase; letter-spacing: .12em; color: var(--muted); }
+  .card .v { font-size: 28px; font-weight: 750; letter-spacing: -.03em; margin: 4px 0 2px; }
+  .card .s { font-size: 12px; color: var(--muted); }
+  .card.good .v { color: var(--ok); } .card.warn .v { color: var(--warn); }
+  .card.bad .v { color: var(--crit); } .card.info .v { color: var(--info); }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 20px; margin: 16px 0; }
+  .grid2 { display: grid; grid-template-columns: repeat(auto-fit,minmax(320px,1fr)); gap: 16px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; margin: 12px 0 4px; }
+  th { text-align: left; color: var(--brand-2); font-size: 11.5px; text-transform: uppercase; letter-spacing: .08em; padding: 10px 8px; border-bottom: 1px solid var(--line); }
+  td { padding: 10px 8px; border-bottom: 1px solid #241e30; vertical-align: top; color: var(--muted); }
+  td b, td strong { color: var(--ink); }
+  tr:last-child td { border-bottom: 0; }
+  code, .mono { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12.5px; color: #e9d5ff; }
+  .tag { display: inline-block; border-radius: 6px; padding: 2px 8px; font-size: 11px; font-weight: 700; white-space: nowrap; }
+  .t-crit { background: rgba(248,113,113,.16); color: var(--crit); border: 1px solid rgba(248,113,113,.3); }
+  .t-high { background: rgba(251,146,60,.15); color: var(--high); border: 1px solid rgba(251,146,60,.3); }
+  .t-med  { background: rgba(251,191,36,.13); color: var(--warn); border: 1px solid rgba(251,191,36,.28); }
+  .t-low  { background: rgba(147,197,253,.13); color: var(--info); border: 1px solid rgba(147,197,253,.28); }
+  .t-ok   { background: rgba(74,222,128,.13); color: var(--ok); border: 1px solid rgba(74,222,128,.28); }
+  .bar { height: 9px; border-radius: 999px; background: var(--panel-2); overflow: hidden; min-width: 90px; }
+  .bar > i { display: block; height: 100%; background: linear-gradient(90deg, var(--brand), var(--accent, #f0abfc)); }
+  .flow { display: flex; gap: 8px; align-items: stretch; flex-wrap: wrap; margin: 14px 0; }
+  .step {
+    flex: 1 1 150px; background: var(--panel-2); border: 1px solid var(--line);
+    border-radius: 10px; padding: 12px; min-width: 140px;
+  }
+  .step .n { color: var(--brand); font-size: 11px; font-weight: 800; letter-spacing: .1em; }
+  .step .t { font-weight: 650; margin: 3px 0 5px; }
+  .step .d { font-size: 12px; color: var(--muted); }
+  .arrow { align-self: center; color: var(--brand); font-size: 20px; }
+  .callout { border-left: 3px solid var(--brand); background: var(--panel-2); padding: 12px 16px; border-radius: 0 10px 10px 0; margin: 14px 0; }
+  .callout.warn { border-color: var(--warn); }
+  .callout.crit { border-color: var(--crit); }
+  .callout.ok { border-color: var(--ok); }
+  .callout p:last-child { margin-bottom: 0; }
+  ul.clean { margin: 8px 0 0; padding-left: 20px; color: var(--muted); }
+  ul.clean li { margin-bottom: 7px; }
+  .kpi-row { display: flex; gap: 14px; flex-wrap: wrap; align-items: baseline; }
+  .big { font-size: 42px; font-weight: 800; letter-spacing: -.04em; color: var(--crit); }
+  footer { border-top: 1px solid var(--line); padding: 24px 0; color: var(--muted); font-size: 12px; }
+  @media print {
+    body { background: #fff; color: #111; }
+    nav.toc { display: none; }
+    header.hero { background: #fff; }
+    .panel, .card, .step { background: #fff; border-color: #ccc; }
+    h2, h3, h4, td b, td strong { color: #111; }
+    p, td { color: #333; }
+  }
+  @media (max-width: 620px) { .wrap { padding-left: 14px; padding-right: 14px; } table { font-size: 12px; } }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <div class="eyebrow">Auditoría integral · informe ejecutivo + técnico</div>
+    <h1>Redil: qué se construyó, cómo funciona y qué no escala</h1>
+    <p class="lead">Reporte generado el 24 de noviembre de 2026 sobre el estado real del código, la base de datos y el despliegue. Cubre los siete ejes pedidos: seguridad, inicio de sesión, información de miembros del tenant, escalabilidad, código sucio, amplitud de archivos y rendimiento con 100.000 usuarios concurrentes.</p>
+    <div class="meta">
+      <span class="pill">Proyecto: <b>redil-5bb15</b></span>
+      <span class="pill">Stack: <b>React 19 · Vite 8 · Supabase · Firebase Hosting Spark</b></span>
+      <span class="pill">Estado: <b>último deploy publicado · login Google verificado por el usuario</b></span>
+      <span class="pill">Fuente: <b>docs/CONTEXTO.md · 26 secciones 16.x</b></span>
+    </div>
+  </div>
+</header>
+
+<nav class="toc"><div class="wrap">
+  <a href="#resumen">Resumen</a>
+  <a href="#seguridad">1 · Seguridad</a>
+  <a href="#login">2 · Inicio de sesión</a>
+  <a href="#miembros">3 · Miembros</a>
+  <a href="#escalabilidad">4 · Escalabilidad</a>
+  <a href="#sucio">5 · Código sucio</a>
+  <a href="#archivos">6 · Archivos</a>
+  <a href="#rendimiento">7 · 100k usuarios</a>
+  <a href="#refactoring">8 · Refactoring</a>
+  <a href="#accion">9 · Plan de acción</a>
+  <a href="#historial">10 · Lo hecho</a>
+  <a href="#metodologia">Metodología</a>
+</div></nav>
+
+<div class="wrap">
+
+<section id="resumen">
+  <h2>Resumen ejecutivo</h2>
+  <p>El sistema está funcionalmente completo y el usuario confirmó que el <b>login con Google ya funciona con el último deploy</b>. Lo que queda no es un bloqueo de acceso sino de <b>robustez</b>: revocación del token de congregación, coherencia de roles, y sobre todo preparar el código para 100.000 usuarios concurrentes sin que se rompa ni se lagee. Los límites del plan gratuito se mencionan como contexto, no como el eje del pedido.</p>
+
+  <div class="cards">
+    <div class="card warn"><div class="k">Riesgo operativo</div><div class="v">Alto</div><div class="s">Token tenant sin revocación server-side</div></div>
+    <div class="card good"><div class="k">Login Google</div><div class="v">Verificado</div><div class="s">Funciona con el último deploy</div></div>
+    <div class="card good"><div class="k">OAuth</div><div class="v">Sin riesgo</div><div class="s">Modificado por el usuario</div></div>
+    <div class="card good"><div class="k">Miembro → tenant</div><div class="v">R1 ✓</div><div class="s">UNIQUE(user_id) en memberships</div></div>
+    <div class="card warn"><div class="k">100k concurrentes</div><div class="v">No preparado</div><div class="s">Robustez del código, no del plan</div></div>
+    <div class="card warn"><div class="k">Archivos &gt;100 líneas</div><div class="v">28</div><div class="s">de 140 TS/TSX</div></div>
+    <div class="card info"><div class="k">Tests automatizados</div><div class="v">0</div><div class="s">Sin suite ni CI</div></div>
+    <div class="card info"><div class="k">Bundle precache</div><div class="v">1,45 MB</div><div class="s">86 entradas · dist 1,82 MB</div></div>
+    <div class="card info"><div class="k">RPCs SQL</div><div class="v">60</div><div class="s">10 tablas · 11 índices · 9 triggers</div></div>
+  </div>
+
+  <div class="callout ok">
+    <p><b>Cerrado y confirmado por el usuario:</b> el login con Google funciona correctamente con el último deploy y el OAuth client ya fue modificado, sin riesgo conocido. El incidente de credenciales en la URL queda registrado solo como antecedente histórico; no figura como tarea pendiente.</p>
+  </div>
+
+  <h3>Hallazgos por eje</h3>
+  <table>
+    <thead><tr><th>Eje</th><th>Estado</th><th>Conclusión corta</th></tr></thead>
+    <tbody>
+      <tr><td><b>1. Seguridad</b></td><td><span class="tag t-high">Alto</span></td><td>OAuth cerrado por el usuario; quedan la revocación del token tenant, roles residuales y la verificación en vivo de los revokes SQL.</td></tr>
+      <tr><td><b>2. Inicio de sesión</b></td><td><span class="tag t-ok">OK</span></td><td>Ambos flujos funcionan; las deudas son la revocación server-side y el texto «venció» que no dispara el botón de login.</td></tr>
+      <tr><td><b>3. Datos de miembros</b></td><td><span class="tag t-med">Medio</span></td><td>R1 y alcance por tenant correctos; falta paginación y hay pantallas legacy que duplican vistas.</td></tr>
+      <tr><td><b>4. Escalabilidad</b></td><td><span class="tag t-high">Alto</span></td><td>El código no está preparado para 100k concurrentes: listados completos, agregados recalculados y fan-out de refetch. El plan es contexto.</td></tr>
+      <tr><td><b>5. Código sucio</b></td><td><span class="tag t-med">Medio</span></td><td>28 archivos TS/TSX sobre el límite, 7 pantallas legacy, 0 TODO/FIXME reales, 0 tests, iconografía duplicada.</td></tr>
+      <tr><td><b>6. Amplitud</b></td><td><span class="tag t-med">Medio</span></td><td>11.361 líneas TS/TSX; el archivo más grande tiene 535. CSS y SQL también son grandes.</td></tr>
+      <tr><td><b>7. 100k usuarios</b></td><td><span class="tag t-high">No preparado</span></td><td>La pregunta es si el código se rompe o se lagea: hoy sí, por 3.333 RPS modelados, precache completo y refetch global.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section id="seguridad">
+  <h2>1 · Seguridad</h2>
+  <p>La base está bien planteada: RLS activa en las 10 tablas de tenant, helpers sensibles sin grant, triggers que bloquean columnas críticas y ninguna service_role key en el front. El usuario confirmó que el <b>OAuth client fue modificado y no presenta riesgo</b>, así que el incidente de credenciales queda fuera de los pendientes. Lo que sigue abierto es de <b>revocación</b> del token de tenant, de <b>roles</b> que no terminaron de alinearse con «no hay líder global» y de <b>verificación en vivo</b> de los revokes SQL.</p>
+
+  <h3>Hallazgos principales</h3>
+  <table>
+    <thead><tr><th>#</th><th>Hallazgo</th><th>Sev.</th><th>Evidencia</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td><b>Cerrado:</b> el usuario modificó el OAuth client y confirmó que no presenta riesgo. El token expuesto en el historial queda como antecedente, no como hallazgo abierto.</td><td><span class="tag t-ok">Confirmado</span></td><td>Confirmación del usuario, 24/11/2026</td></tr>
+      <tr><td>2</td><td>El token del tenant es un bearer sin revocación: no se borra en logout ni al cambiar contraseña; cada login emite otro válido 12 h.</td><td><span class="tag t-high">Alto</span></td><td><code>login.ts:95-100</code>; <code>tenantAdmin.sql:73-74,340-368</code></td></tr>
+      <tr><td>3</td><td>RLS de <code>news</code> permite a líderes escribir avisos por PostgREST directo, contra <code>rulesView.md:117-120</code>.</td><td><span class="tag t-high">Alto</span></td><td><code>redil_schema.sql:686-695</code></td></tr>
+      <tr><td>4</td><td><b>Contactos cerrado:</b> <code>leads_user()</code> fue reemplazado por <code>leads_member_contact()</code> con alcance por ministerio. Sigue abierto <code>list_leaders_congregation_members()</code>, que lista miembros de todo el tenant.</td><td><span class="tag t-high">Alto</span></td><td><code>rpcs/fixContactsScope.sql</code>; <code>leaderCapabilities.sql:111-157</code></td></tr>
+      <tr><td>5</td><td>Registro y login de congregación abiertos a <code>anon</code>, sin rate limit, lockout ni validación de contraseña en SQL.</td><td><span class="tag t-high">Alto</span></td><td><code>congregation_auth.sql:57-59,121</code>; <code>CongregationAccess.tsx:82</code></td></tr>
+      <tr><td>6</td><td>Detección de sesión vencida rota por traducción de errores: <code>isAuthSessionError</code> / <code>isTenantSessionError</code> clasifican por texto en español.</td><td><span class="tag t-med">Medio</span></td><td><code>login.ts:47-50</code>; <code>CongregationStore.ts:55-58</code>; <code>errors.ts:28</code></td></tr>
+      <tr><td>7</td><td><code>expiresAt</code> local calculado con el reloj del cliente; se ignora el <code>expires_at</code> del RPC.</td><td><span class="tag t-med">Medio</span></td><td><code>login.ts:65-72</code>; <code>CongregationStore.ts:5,49</code></td></tr>
+      <tr><td>8</td><td>Sin CSP ni headers de seguridad; credenciales de sesión en <code>localStorage</code>.</td><td><span class="tag t-med">Medio</span></td><td><code>index.html:1-24</code>; <code>firebase.json:6-17</code></td></tr>
+    </tbody>
+  </table>
+
+  <div class="grid2">
+    <div class="panel">
+      <h4>Lo que está bien ✓</h4>
+      <ul class="clean">
+        <li>RLS activa en <code>profiles</code>, <code>member_contacts</code>, <code>congregations</code>, <code>memberships</code>, <code>ministries</code>, <code>ministry_members</code>, <code>posts</code>, <code>events</code>, <code>news</code> y <code>tenant_sessions</code> (<code>redil_schema.sql:570-578</code>).</li>
+        <li><code>tenant_sessions</code> sin políticas: solo accesible desde funciones definer (<code>tenantAdmin.sql:19-30</code>).</li>
+        <li>Triggers bloquean cambio directo de <code>vify</code>, <code>share_announcements</code>, <code>admin_email</code>, <code>password_hash</code>, <code>invitation_code</code> y memberships (<code>redil_schema.sql:188-235</code>).</li>
+        <li><code>profiles_of_congregation()</code> y <code>list_public_news()</code> ya validan sesión/alcance <b>en el archivo</b> (<code>socialProfiles.sql:100-145</code>, <code>newsAnnouncements.sql:171-199</code>).</li>
+        <li>PKCE configurado (<code>supabase.ts:22-32</code>); sin <code>service_role</code> en el front; <code>.env</code> ignorado por git y no trackeado.</li>
+        <li>Los 74 <code>SECURITY DEFINER</code> revisados tienen <code>set search_path</code>; ninguno lo omite.</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <h4>Lo que falta ✗</h4>
+      <ul class="clean">
+        <li>RPC <code>revoke_tenant_session</code> y purga de sesiones vencidas: no existen.</li>
+        <li>Rate limit / lockout / CAPTCHA para login y registro de tenants: no existen.</li>
+        <li>CSP, <code>X-Content-Type-Options</code>, <code>Referrer-Policy</code> y HSTS: no configurados.</li>
+        <li>UI o RPC para activar <code>vify</code> y <code>share_announcements</code>: no existen, solo se cambian a mano en SQL.</li>
+        <li>Tests de seguridad: 0 archivos <code>*.test.*</code> / <code>*.spec.*</code>.</li>
+        <li>Verificación en vivo de qué migrations corrieron y qué grants históricos de <code>anon</code> quedaron.</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>Grants a <code>anon</code> en RPCs sensibles</h3>
+  <table>
+    <thead><tr><th>Función</th><th>Grant</th><th>Riesgo</th></tr></thead>
+    <tbody>
+      <tr><td><code>create_congregation</code> (7 args)</td><td><code>anon, authenticated</code> (<code>congregation_auth.sql:161</code>)</td><td>Registro abierto: cualquier anónimo crea tenants y consume slug/código.</td></tr>
+      <tr><td><code>login_congregation</code></td><td><code>anon, authenticated</code> (<code>tenantAdmin.sql:418</code>)</td><td>Necesario, pero sin throttle ni lockout.</td></tr>
+      <tr><td><code>tenant_from_token</code></td><td><code>anon, authenticated</code> (<code>tenantAdmin.sql:404,419</code>)</td><td>Oráculo token → tenant; bajo, porque hay que poseer el token.</td></tr>
+      <tr><td>CRUD de administración del tenant</td><td><code>anon, authenticated</code> (<code>tenantAdmin.sql:418-428</code>)</td><td>Por diseño (el tenant no tiene <code>auth.uid()</code>): <b>el token es la única credencial</b> y da hasta cambio de contraseña admin.</td></tr>
+      <tr><td><code>list_public_news</code></td><td><code>anon, authenticated</code> (<code>newsAnnouncements.sql:217</code>)</td><td>Valida <code>vify</code> + <code>share_announcements</code> + <code>is_global</code> dentro de la función; diseñado público.</td></tr>
+      <tr><td>RPCs member-side (<code>list_my_news</code>, <code>get_my_social_context</code>, etc.)</td><td>Solo <code>authenticated</code> (<code>socialProfiles.sql:480-489</code>)</td><td>Correcto.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout warn">
+    <p><b>Revokes incompletos:</b> <code>tenantAdmin.sql:403-415</code>, <code>leaderCapabilities.sql:382-392</code> y <code>newsAnnouncements.sql:203-208</code> revocan solo desde <code>PUBLIC</code>, no desde <code>anon</code>. En PostgreSQL eso <b>no elimina grants explícitos históricos</b> a <code>anon</code>. El historial (<code>CONTEXTO.md:1968-1982</code>) documenta que <code>can_cross_tenants</code> seguía ejecutable con anon; hay que corregir <code>newsAnnouncements.sql</code> (hoy solo revoca <code>from public</code>), re-ejecutar ese archivo junto con <code>socialProfiles.sql</code> —que sí ya tiene <code>from public, anon</code>— y auditar <code>information_schema.role_routine_grants</code>.</p>
+  </div>
+
+  <h3>Secretos y credenciales</h3>
+  <table>
+    <thead><tr><th>Elemento</th><th>Estado</th><th>Detalle</th></tr></thead>
+    <tbody>
+      <tr><td><code>service_role</code> / Secret Key en el front</td><td><span class="tag t-ok">No encontrado</span></td><td>Ni en <code>src/</code>, <code>.env</code> o <code>.env.example</code>.</td></tr>
+      <tr><td>Anon key en el bundle</td><td><span class="tag t-ok">Esperado</span></td><td>Pública por diseño; la seguridad depende de RLS (<code>supabase.ts:12-22</code>).</td></tr>
+      <tr><td>Unsplash Access Key</td><td><span class="tag t-med">Riesgo de cuota</span></td><td>Queda en <code>dist/assets/*</code>; todos los usuarios comparten la key.</td></tr>
+      <tr><td>Token tenant en <code>localStorage</code></td><td><span class="tag t-med">Expuesto a XSS</span></td><td><code>redil-congregation</code> guarda <code>sessionToken</code> en texto plano (<code>CongregationStore.ts:18-19,32-39</code>).</td></tr>
+      <tr><td>Tokens de Supabase Auth</td><td><span class="tag t-med">localStorage</span></td><td>Default de supabase-js (<code>persistSession: true</code>); sin storage custom.</td></tr>
+      <tr><td>Tokens en URL — código actual</td><td><span class="tag t-ok">No</span></td><td>Viajan en el body de <code>POST /rest/v1/rpc/*</code>.</td></tr>
+      <tr><td>Tokens en URL — antecedente</td><td><span class="tag t-ok">Resuelto</span></td><td><code>http://localhost:3000/#access_token=...&provider_token=...&refresh_token=...</code> quedó documentado; el flujo actual usa PKCE con <code>?code=</code> y el usuario dio el login por funcionando.</td></tr>
+      <tr><td>Datos sensibles en docs trackeados</td><td><span class="tag t-low">Podar</span></td><td>Token parcial y email en <code>CONTEXTO.md:623,1697</code>; project ref en <code>:2279-2302</code>.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Cross-tenant: reglas y huecos</h3>
+  <table>
+    <thead><tr><th>Regla</th><th>Implementación</th><th>Hueco</th></tr></thead>
+    <tbody>
+      <tr><td>Entre tenants, ambos verificados</td><td><code>can_cross_tenants</code> = tenants distintos y ambos <code>vify</code> (<code>socialProfiles.sql:42-52</code>).</td><td>Grant viejo de <code>anon</code> podría quedar en la DB.</td></tr>
+      <tr><td>Perfiles propios siempre visibles</td><td><code>is_member(p_cid)</code> da acceso directo (<code>:125-128</code>).</td><td>La UI deshabilita también «Mi congregación» si <code>vify=false</code> (<code>useDirectoryView.ts:56,62</code>).</td></tr>
+      <tr><td>Avisos compartidos</td><td><code>share_announcements=true</code> + <code>can_cross_tenants</code> + <code>is_global</code> (<code>socialProfiles.sql:370-383,446-459</code>).</td><td>No hay forma desde la app de activar <code>share_announcements</code>.</td></tr>
+      <tr><td>Avisos públicos anónimos</td><td><code>list_public_news</code> valida <code>vify</code> + flag + <code>is_global</code> (<code>newsAnnouncements.sql:171-199</code>).</td><td>Diseñado sin sesión; conviene decidir si se quiere exponer a anon.</td></tr>
+      <tr><td>R1</td><td><code>memberships_user_id_key UNIQUE(user_id)</code> (<code>redil_schema.sql:97</code>).</td><td>Varios RPC usan <code>limit 1</code> sin <code>order by</code>; si la constraint no está en vivo, mezclan tenants.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Acciones correctivas (en orden)</h3>
+  <table>
+    <thead><tr><th>Sev.</th><th>Acción</th></tr></thead>
+    <tbody>
+      <tr><td><span class="tag t-ok">✓</span></td><td><b>Ya cerrado por el usuario:</b> login Google funcionando con el último deploy y OAuth client modificado sin riesgo. No queda ninguna acción sobre el client ni sobre la publicación.</td></tr>
+      <tr><td><span class="tag t-high">2</span></td><td>Agregar <code>revoke_tenant_session(p_token)</code> y llamarlo en logout; borrar todas las filas de la congregación al cambiar contraseña; job que purgue <code>expires_at &lt; now()</code>.</td></tr>
+      <tr><td><span class="tag t-high">3</span></td><td>Quitar las policies de escritura de <code>news</code> para <code>authenticated</code>; dejar solo el RPC definer.</td></tr>
+      <tr><td><span class="tag t-ok">✓</span></td><td><b>Cerrado:</b> contactos con alcance por ministerio vía <code>fixContactsScope.sql</code> (ejecutado el 24/11/2026).</td></tr>
+      <tr><td><span class="tag t-high">4</span></td><td>Alinear <code>list_leaders_congregation_members()</code> con <code>leads_ministry()</code>/admin; hoy lista miembros de todo el tenant.</td></tr>
+      <tr><td><span class="tag t-high">5</span></td><td>Rate limit + CAPTCHA para <code>login_congregation</code> y <code>create_congregation</code>; validar complejidad también en SQL; verificar email del admin antes de <code>vify=true</code>.</td></tr>
+      <tr><td><span class="tag t-med">6</span></td><td>Propagar <code>error.code</code>/<code>status</code> en <code>AppError</code> en vez de clasificar por texto; unificar los dos <code>callRpc</code>.</td></tr>
+      <tr><td><span class="tag t-med">7</span></td><td>Usar el <code>expires_at</code> del servidor en vez de <code>Date.now()+12h</code>; agregar CSP y headers en <code>firebase.json</code>; considerar cookie HttpOnly para el token tenant.</td></tr>
+      <tr><td><span class="tag t-med">8</span></td><td>Corregir <code>newsAnnouncements.sql</code> a <code>revoke ... from public, anon</code>, re-ejecutar ambos SQL y auditar <code>information_schema.role_routine_grants</code>.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section id="login">
+  <h2>2 · Inicio de sesión</h2>
+  <p>Hay dos flujos independientes que nunca deben coexistir. El usuario confirmó que <b>ambos funcionan con el último deploy</b>, incluido el retorno de Google con PKCE. Este eje ya no evalúa si el login está roto: documenta el flujo y las deudas residuales (revocación del token tenant, expiración medida con el reloj local y el texto de error que no dispara el botón «Iniciar sesión»).</p>
+
+  <h3>Flujo A · Congregación (tenant)</h3>
+  <div class="flow">
+    <div class="step"><div class="n">1</div><div class="t">Formulario</div><div class="d"><code>PrincipalView.tsx:25,62-67</code> → <code>CongregationAccess.tsx:131-157</code>.</div></div>
+    <div class="arrow">→</div>
+    <div class="step"><div class="n">2</div><div class="t">Baja Auth</div><div class="d"><code>login.ts:62</code> cierra Supabase Auth primero (default <code>global</code>: cierra todas las sesiones del usuario).</div></div>
+    <div class="arrow">→</div>
+    <div class="step"><div class="n">3</div><div class="t">RPC</div><div class="d"><code>login_congregation(email, password)</code>: bcrypt + exige <code>vify=true</code> + inserta fila en <code>tenant_sessions</code>.</div></div>
+    <div class="arrow">→</div>
+    <div class="step"><div class="n">4</div><div class="t">Persistencia</div><div class="d"><code>session_token</code> de 12 h en <code>localStorage['redil-congregation']</code> vía zustand.</div></div>
+    <div class="arrow">→</div>
+    <div class="step"><div class="n">5</div><div class="t">Validación</div><div class="d"><code>ProtectedRoute</code> corre <code>validateCongregationSession()</code> con <code>list_tenant_news</code> (<code>AppRoutes.tsx:16-38</code>).</div></div>
+  </div>
+
+  <h3>Flujo B · Miembro (Google + PKCE)</h3>
+  <div class="flow">
+    <div class="step"><div class="n">1</div><div class="t">Click</div><div class="d"><code>login.ts:52-56</code> baja la sesión tenant y llama <code>signInWithOAuth</code> con <code>redirectTo: origin + '/login'</code>.</div></div>
+    <div class="arrow">→</div>
+    <div class="step"><div class="n">2</div><div class="t">Google</div><div class="d">Redirige a <code>https://&lt;ref&gt;.supabase.co/auth/v1/callback</code>.</div></div>
+    <div class="arrow">→</div>
+    <div class="step"><div class="n">3</div><div class="t">Supabase</div><div class="d">Devuelve al navegador a una <b>Redirect URL permitida</b>; si no coincide, cae al Site URL.</div></div>
+    <div class="arrow">→</div>
+    <div class="step"><div class="n">4</div><div class="t">PKCE</div><div class="d">El retorno trae <code>?code=</code>; supabase-js lo canjea por la sesión. No hay código propio de <code>code_verifier</code>.</div></div>
+    <div class="arrow">→</div>
+    <div class="step"><div class="n">5</div><div class="t">Store</div><div class="d"><code>AuthProvider</code>: <code>getSession()</code> + <code>onAuthStateChange</code> → <code>mapAuthUser</code> → <code>syncMyRole()</code>.</div></div>
+    <div class="arrow">→</div>
+    <div class="step"><div class="n">6</div><div class="t">R7</div><div class="d"><code>MemberAccessGuard</code>: sin membresía, va a <code>/acceso</code>; con código, <code>join_congregation</code>.</div></div>
+  </div>
+
+  <div class="callout ok">
+    <p><b>Estado actual (confirmado):</b> el login con Google funciona correctamente en producción. El incidente previo —token en <code>http://localhost:3000/#access_token=...</code> por un Site URL que apuntaba al puerto 3000— quedó resuelto con PKCE y la configuración vigente. El JWT ya no viaja en la URL: el retorno trae <code>?code=</code> y supabase-js lo canjea.</p>
+  </div>
+
+  <h3>Configuración vigente (dada por funcionando)</h3>
+  <table>
+    <thead><tr><th>Dónde</th><th>Valor</th></tr></thead>
+    <tbody>
+      <tr><td><b>Supabase → Authentication → URL Configuration → Site URL</b></td><td><code>https://redil-5bb15.web.app</code> (en local: <code>http://localhost:5173</code>)</td></tr>
+      <tr><td><b>Supabase → Redirect URLs</b></td><td><code>https://redil-5bb15.web.app/login</code><br><code>https://redil-5bb15.firebaseapp.com/login</code><br><code>http://localhost:5173/login</code><br><code>http://localhost:3000/login</code> (solo si se prueba en ese puerto)</td></tr>
+      <tr><td><b>Google Cloud Console → OAuth client (Web) → Authorized redirect URIs</b></td><td>Un único URI: <code>https://ghjdhnqphsflcajoacwq.supabase.co/auth/v1/callback</code>. Las URLs de la app <b>no</b> van en Google.</td></tr>
+      <tr><td><b>Google → Authorized JavaScript origins</b></td><td><code>https://ghjdhnqphsflcajoacwq.supabase.co</code> y <code>https://redil-5bb15.web.app</code></td></tr>
+      <tr><td><b>OAuth client</b></td><td><span class="tag t-ok">Modificado por el usuario</span> Sin riesgo conocido; no queda rotación pendiente.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Puntos de falla detectados</h3>
+  <table>
+    <thead><tr><th>Sev.</th><th>Problema</th><th>Consecuencia</th><th>Evidencia</th></tr></thead>
+    <tbody>
+      <tr><td><span class="tag t-high">Alta</span></td><td>Token tenant sin revocación: no hay <code>DELETE FROM tenant_sessions</code> ni RPC de revoke; cambiar password no invalida tokens.</td><td>Un token robado sigue válido 12 h aunque cierres sesión. Cada login emite otro token.</td><td><code>login.ts:95-100</code>; <code>tenantAdmin.sql:340-368</code></td></tr>
+      <tr><td><span class="tag t-high">Alta</span></td><td>«Una sola sesión activa» es solo client-side y no atómica.</td><td>Dos pestañas pueden revivir la sesión persistida; el servidor no limita tokens vigentes.</td><td><code>login.ts:53,62</code>; <code>AuthProvider.tsx:28</code></td></tr>
+      <tr><td><span class="tag t-med">Media</span></td><td>El front ignora el <code>expires_at</code> del RPC y calcula 12 h con el reloj local.</td><td>Sesiones viejas sin <code>expiresAt</code> nunca vencen localmente; reloj desfasado = alerta divergente.</td><td><code>login.ts:65-72</code>; <code>CongregationStore.ts:5,49</code></td></tr>
+      <tr><td><span class="tag t-med">Media</span></td><td><code>isAuthSessionError()</code> busca <code>vencid</code>, pero <code>toAppError()</code> devuelve «venció».</td><td>Un JWT expirado se muestra como «No pudimos verificar tu membresía» con solo botón <b>Reintentar</b>, sin <b>Iniciar sesión</b>.</td><td><code>login.ts:47-50</code>; <code>errors.ts:28</code>; <code>MemberAccessGuard.tsx:34,41-45</code></td></tr>
+      <tr><td><span class="tag t-med">Media</span></td><td><code>isTenantSessionError()</code> depende del texto en español; hay dos <code>callRpc</code> que traducen distinto.</td><td>La alerta global de sesión vencida puede no dispararse en algunas vistas.</td><td><code>CongregationStore.ts:55-58</code>; <code>supabase.ts:43-46</code>; <code>tenantRpc.ts:13-17</code></td></tr>
+      <tr><td><span class="tag t-med">Media</span></td><td><code>PrincipalView</code> solo limpia <code>error</code>/<code>error_description</code> de la URL; no maneja un <code>?code=</code> fallido.</td><td>Si el canje PKCE falla sin parámetro <code>error</code>, queda <code>authReady=true</code>, <code>user=null</code> y la pantalla sin mensaje útil.</td><td><code>PrincipalView.tsx:12-19,29-33</code></td></tr>
+      <tr><td><span class="tag t-med">Media</span></td><td>Fallo de red en validación devuelve <code>true</code> y <code>MemberAccessGuard</code> confía en la congregación persistida.</td><td>Con el token revocado y sin conexión se ven datos cacheados: riesgo en dispositivos compartidos (coherente con offline-first).</td><td><code>login.ts:92</code>; <code>AppRoutes.tsx:33,37</code>; <code>MemberAccessGuard.tsx:30</code></td></tr>
+      <tr><td><span class="tag t-med">Media</span></td><td>Contraseña: mínimo 6 solo en el formulario; SQL exige no vacío. Sin lockout ni rate limit.</td><td>Fuerza bruta viable contra un RPC público.</td><td><code>CongregationAccess.tsx:82</code>; <code>congregation_auth.sql:57-59</code></td></tr>
+      <tr><td><span class="tag t-low">Baja</span></td><td><code>logout()</code> usa <code>signOut()</code> global: cierra todas las sesiones Auth del usuario.</td><td>Inconveniente si la persona tiene varias apps con el mismo Google.</td><td><code>login.ts:36-45</code></td></tr>
+      <tr><td><span class="tag t-low">Baja</span></td><td><code>localStorage.removeItem('user')</code> parece vestigial: el store de usuario no usa <code>persist</code>.</td><td>Código muerto sin efecto.</td><td><code>login.ts:37</code>; <code>Store.ts:12-17</code></td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout ok">
+    <p><b>Estado del fix PKCE:</b> <code>src/supabase/supabase.ts</code> crea el cliente con <code>flowType: 'pkce'</code>, <code>detectSessionInUrl: true</code>, <code>persistSession: true</code> y <code>autoRefreshToken: true</code>. El retorno trae <code>?code=</code> en vez de <code>#access_token=</code>, así que el token no queda expuesto en la URL. <code>npm run build</code> ✅ y el deploy está publicado y probado por el usuario ✅.</p>
+  </div>
+
+  <h3>Estado de la verificación y deudas residuales</h3>
+  <ul class="clean">
+    <li><span class="tag t-ok">Cerrado</span> Site URL y Redirect URLs aplicadas; OAuth client modificado; login Google probado con el último deploy.</li>
+    <li><span class="tag t-ok">Cerrado</span> Retorno con PKCE: la URL final no contiene <code>access_token</code> ni <code>provider_token</code>.</li>
+    <li><span class="tag t-high">Pendiente</span> Agregar <code>revoke_tenant_session(p_token)</code> y llamarlo en logout; hoy un token robado sigue válido 12 h.</li>
+    <li><span class="tag t-med">Pendiente</span> Corregir <code>isAuthSessionError()</code>: busca <code>vencid</code> pero <code>toAppError()</code> devuelve «venció», así que no aparece el botón «Iniciar sesión».</li>
+    <li><span class="tag t-med">Pendiente</span> Usar el <code>expires_at</code> del RPC en vez del reloj local y unificar los dos <code>callRpc</code>.</li>
+    <li><span class="tag t-med">Recomendado</span> Probar los dos hosts (<code>*.web.app</code> y <code>*.firebaseapp.com</code>) tras futuros cambios de allowlist.</li>
+  </ul>
+</section>
+
+<section id="miembros">
+  <h2>3 · Información de cada miembro dentro del tenant</h2>
+  <p>El aislamiento por congregación está bien resuelto en los RPC sociales y en RLS: los perfiles se filtran siempre por <code>congregation_id</code> de la sesión. Los riesgos reales están en el rol <code>leader</code> global residual, un RPC público de avisos y en las caídas a datos locales del dispositivo.</p>
+
+  <h3>Qué se guarda y quién lo ve</h3>
+  <table>
+    <thead><tr><th>Dato</th><th>Ubicación</th><th>Tenant</th><th>Miembro</th><th>Otros tenants</th></tr></thead>
+    <tbody>
+      <tr><td><code>id</code>, email, metadata de Google</td><td><code>auth.users</code> + trigger a <code>profiles</code> (<code>redil_schema.sql:239-258</code>)</td><td>Email vía RPC <code>list_congregation_members</code></td><td>Su propio email</td><td><span class="tag t-low">No</span></td></tr>
+      <tr><td>Nombre, apellido, foto, portada, bio</td><td><code>public.profiles</code> (<code>redil_schema.sql:28-37</code>)</td><td>Sí</td><td>Sí</td><td>Solo con <code>vify</code> en ambas</td></tr>
+      <tr><td>Teléfono</td><td><code>member_contacts</code> (<code>redil_schema.sql:41-45</code>)</td><td>Sí, en el listado</td><td>Solo el propio</td><td><span class="tag t-low">No</span> (<code>leads_user</code> exige tenant común)</td></tr>
+      <tr><td>Rol global (<code>admin/leader/member</code>)</td><td><code>memberships.role</code> (<code>redil_schema.sql:90-100</code>)</td><td>Gestionable</td><td>Lee el propio</td><td><span class="tag t-low">No</span></td></tr>
+      <tr><td>Rol real de liderazgo</td><td><code>ministry_members.ministry_role</code> (<code>redil_schema.sql:114-131</code>)</td><td>Sí</td><td>Solo de su ministerio</td><td><span class="tag t-low">No</span></td></tr>
+      <tr><td>Ministerios y grupos</td><td><code>ministries</code> + <code>ministry_members</code></td><td>Todos</td><td>Solo los que lidera / integra</td><td><span class="tag t-low">No</span></td></tr>
+      <tr><td>Contraseña del tenant, <code>vify</code>, <code>share_announcements</code></td><td><code>congregations</code> (<code>redil_schema.sql:48-70</code>)</td><td>Admin</td><td><span class="tag t-low">No</span></td><td>Solo <code>vify</code> para decidir cruce</td></tr>
+      <tr><td>Miembros locales (nombre, teléfono, notas)</td><td><code>IndexedDB</code> (<code>src/lib/types.ts:1-29</code>)</td><td>No aplica</td><td>Sí, pero <b>no son datos Supabase</b></td><td><span class="tag t-low">No</span></td></tr>
+    </tbody>
+  </table>
+
+  <h3>Flujo: lista de miembros → perfil individual</h3>
+  <div class="flow">
+    <div class="step"><div class="n">1</div><div class="t">Lista</div><div class="d"><code>MembersView.tsx:27-52</code> elige branch tenant y usa <code>TenantMemberList</code>.</div></div>
+    <div class="arrow">→</div>
+    <div class="step"><div class="n">2</div><div class="t">RPC con token</div><div class="d"><code>list_congregation_members(p_token)</code> · <code>tenantAdmin.sql:110-147</code> valida <code>tenant_from_token</code>.</div></div>
+    <div class="arrow">→</div>
+    <div class="step"><div class="n">3</div><div class="t">Click</div><div class="d">Cada fila es <code>RouterLink</code> a <code>/miembros/:userId</code> · <code>TenantMemberList.tsx:35-43</code>.</div></div>
+    <div class="arrow">→</div>
+    <div class="step"><div class="n">4</div><div class="t">Perfil</div><div class="d"><code>useMemberProfileView</code> carga <b>todos</b> los perfiles propios y hace <code>find(...)</code> en cliente · <code>:16-21</code>.</div></div>
+    <div class="arrow">→</div>
+    <div class="step"><div class="n">5</div><div class="t">Aislamiento</div><div class="d"><code>_profiles_of_congregation_data</code> filtra por tenant · <code>socialProfiles.sql:55-97</code>. El <code>userId</code> de la URL no se valida en servidor.</div></div>
+  </div>
+  <div class="callout warn">
+    <p>El perfil individual <b>no es un «get by id»</b>: descarga toda la congregación y filtra en el navegador. Funciona y es seguro porque el RPC solo devuelve el tenant de la sesión, pero es una amplificación innecesaria (ver eje 7).</p>
+  </div>
+
+  <h3>Roles: qué puede hacer cada uno</h3>
+  <table>
+    <thead><tr><th>Rol</th><th>Cómo se calcula</th><th>Alcance real</th></tr></thead>
+    <tbody>
+      <tr><td><b>Admin</b></td><td><code>memberships.role='admin'</code> · <code>is_admin()</code> (<code>redil_schema.sql:280-291</code>)</td><td>Todo el tenant vía token: roles, ministerios, congregación, avisos, eventos.</td></tr>
+      <tr><td><b>Líder de ministerio</b></td><td><code>ministry_members.ministry_role='leader'</code> · <code>leads_ministry(id)</code> (<code>redil_schema.sql:313-326</code>)</td><td>Editar su ministerio y gestionar sus integrantes. No crea ni borra ministerios.</td></tr>
+      <tr><td><b>Miembro</b></td><td>Resto</td><td>Editar su perfil y contactos; leer lo público de su tenant.</td></tr>
+    </tbody>
+  </table>
+
+  <h4>Contradicciones de roles detectadas</h4>
+  <ul class="clean">
+    <li><b>El <code>leader</code> global sigue asignable:</b> la UI lo oculta (<code>useAccountSettings.ts:24-31</code>) pero <code>update_member_role</code> lo acepta (<code>tenantAdmin.sql:302-308</code>) y el enum lo incluye (<code>redil_schema.sql:11</code>). No da poder de ministerio, pero sí se muestra como «Líder».</li>
+    <li><b><code>leads_user()</code> lo trata como superior:</b> <code>redil_schema.sql:343-356</code> usa <code>role in ('admin','leader')</code> y habilita <code>contacts_select</code> (`:590-593`): un <code>leader</code> global sin ministerio puede leer teléfonos de todo el tenant. Contradice «no hay líder global».</li>
+    <li><b>Un líder de un solo grupo puede editar contenido de todo el tenant:</b> las policies de posts/events/news usan <code>is_leader(congregation_id)</code> (<code>redil_schema.sql:659-695</code>), que es tenant-wide.</li>
+    <li><b>Mismo badge para dos significados:</b> <code>RoleBadge.tsx:11-15</code> se usa tanto para <code>memberships.role</code> como para <code>ministry_role</code>; el chip «Líder» no distingue alcance.</li>
+    <li><b>Candidatos a ministerio filtran por el rol equivocado:</b> <code>MinistryCandidateList.tsx:18-29</code> descarta a quien tiene <code>role==='leader'</code>, aunque el liderazgo real vine de <code>ministry_role</code> (<code>leaderCapabilities.sql:145-150</code>).</li>
+  </ul>
+
+  <h3>Hallazgos priorizados</h3>
+  <table>
+    <thead><tr><th>Sev.</th><th>Hallazgo</th><th>Evidencia</th><th>Acción</th></tr></thead>
+    <tbody>
+      <tr><td><span class="tag t-med">Medio</span></td><td><code>list_public_news</code> es alcanzable por <code>anon</code>: valida <code>vify</code> + <code>share_announcements</code> + <code>is_global</code> del tenant destino, pero no exige sesión ni <code>can_cross_tenants</code> del visitante. Es un acceso <b>público deliberado</b>, no un bypass: hay que confirmar que se quiera exponer y que el DTO no incluya datos sensibles.</td><td><code>newsAnnouncements.sql:171-200,217</code>; cliente en <code>newsService.ts:85-88</code>; contraste con <code>socialProfiles.sql:424-461</code></td><td>Si se decide privado: exigir sesión + <code>can_cross_tenants</code> o borrar el RPC/servicio. Si se mantiene: documentar la decisión y auditar el grant a <code>anon</code>.</td></tr>
+      <tr><td><span class="tag t-high">Alta</span></td><td>Rol <code>leader</code> global asignable con acceso a contactos de todo el tenant.</td><td><code>redil_schema.sql:11,343-356,590-593</code>; <code>tenantAdmin.sql:302-308</code></td><td>Sacar <code>'leader'</code> del RPC y del enum; redefinir <code>leads_user</code>.</td></tr>
+      <tr><td><span class="tag t-med">Media</span></td><td>Un líder de un ministerio puede modificar avisos/eventos globales del tenant.</td><td><code>redil_schema.sql:295-309,659-695</code></td><td>Separar <code>is_leader_tenant</code> de <code>leads_ministry</code> y pasar <code>p_ministry_id</code>.</td></tr>
+      <tr><td><span class="tag t-med">Media</span></td><td>El perfil individual descarga todos los perfiles y filtra en cliente; cada fila tiene 3 subconsultas correlacionadas.</td><td><code>useMemberProfileView.ts:16-21</code>; <code>socialProfiles.sql:78-92</code></td><td>Crear <code>get_member_profile(p_user_id)</code> con la misma validación.</td></tr>
+      <tr><td><span class="tag t-med">Media</span></td><td>Con <code>vify=false</code> se deshabilita también la carga de perfiles propios, aunque el mensaje diga lo contrario y el RPC no lo exija.</td><td><code>useDirectoryView.ts:56,62</code>; <code>DirectoryView.tsx:86-91</code></td><td>Dejar <code>verified</code> solo para la pestaña externa.</td></tr>
+      <tr><td><span class="tag t-med">Media</span></td><td>En sesión de miembro, <code>/miembros</code> cae al ABM local de IndexedDB y puede mostrar datos residuales del dispositivo.</td><td><code>MembersView.tsx:26-28,54-146</code>; <code>MemberAccessGuard.tsx:25-27</code></td><td>Redirigir a <code>/directorio</code> o limpiar IndexedDB al cambiar de usuario.</td></tr>
+      <tr><td><span class="tag t-med">Media</span></td><td>El tenant ve teléfono en el listado pero no hay ningún RPC que lo escriba; el perfil social tampoco muestra email/teléfono.</td><td><code>tenantAdmin.sql:117,137</code>; <code>ProfileDetailsForm.tsx:11-15</code></td><td>Agregar <code>upsert_my_contact(p_phone)</code> o quitar la columna.</td></tr>
+      <tr><td><span class="tag t-med">Media</span></td><td><code>update_member_role</code> puede dejar al tenant sin ningún admin; el token no revalida <code>vify</code> tras el login.</td><td><code>tenantAdmin.sql:98-107,289-314</code>; <code>login.ts:64-79</code></td><td>Impedir degradar al último admin; revalidar <code>vify</code> en <code>tenant_from_token</code>.</td></tr>
+      <tr><td><span class="tag t-low">Baja</span></td><td>RPCs definidos en 4 archivos distintos (<code>login_congregation</code>, <code>join_congregation</code>, etc.) con riesgo de orden de ejecución.</td><td><code>redil_schema.sql</code> + 12 archivos en <code>rpcs/</code></td><td>Un archivo canónico por RPC + migraciones explícitas.</td></tr>
+      <tr><td><span class="tag t-low">Baja</span></td><td><code>DirectoryView</code> dispara hasta 6 cargas RPC y hay dos fuentes de contexto (<code>get_my_social_context</code> + <code>get_my_membership</code>).</td><td><code>useDirectoryView.ts:51-86</code>; <code>lib/hooks.ts:35-75</code></td><td>Un único loader de contexto; cargar externos solo al seleccionar congregación.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section id="escalabilidad">
+  <h2>4 · Escalabilidad</h2>
+  <p><b>Veredicto (respondiendo a la pregunta real):</b> el código <b>no está preparado</b> para 100.000 usuarios concurrentes sin romperse ni lagearse. No es un juicio sobre si el plan gratuito alcanza hoy: los límites de Spark/Free se dejan al final como contexto. Los tres bloqueantes del lado del código son <b>listados completos y conteos recalculados</b>, <b>fan-out de refetch sin dedupe ni abort</b> y <b>precache que anula el code splitting</b>. El orden de ataque es <b>P0 paginación + agregados + índices</b>, después <b>P1 canales, SWR y sync</b>, y por último <b>P2 precache y cota local</b>.</p>
+
+  <h3>Métricas y severidad</h3>
+  <table>
+    <thead><tr><th>#</th><th>Hallazgo</th><th>Evidencia</th><th>Sev.</th><th>¿Afecta la robustez a 100k?</th></tr></thead>
+    <tbody>
+      <tr><td>M1</td><td>Precache de 86 entradas (81 únicas), 1,45 MB en bruto / ~0,78 MB modelados en wire.</td><td><code>vite.config.ts:88-95</code>; <code>dist/sw.js:1</code></td><td><span class="tag t-crit">Crítica</span></td><td><b>Sí</b></td></tr>
+      <tr><td>M2</td><td>Firebase Hosting Spark: 360 MB/día y 10 GB storage.</td><td><code>firebase.json:2-17</code>; Firebase Pricing</td><td><span class="tag t-med">Contexto</span></td><td>No: límite de plan, no de código</td></tr>
+      <tr><td>M3</td><td>Supabase Free/Nano: 60 conexiones directas, 200 clientes de pooler, 500 MB RAM, CPU compartida, 5 GB egress, 50k MAU.</td><td>Supabase Pricing + Compute &amp; Disk</td><td><span class="tag t-med">Contexto</span></td><td>No: se revisa después de optimizar el código</td></tr>
+      <tr><td>M4</td><td><code>fetchCongregationCounts()</code> = 3 RPCs con listados completos para derivar 4 números.</td><td><code>congregationStats.ts:10-21</code></td><td><span class="tag t-crit">Crítica</span></td><td><b>Sí</b></td></tr>
+      <tr><td>M5</td><td>TTL de stats de 5 min con timer automático mientras el componente sigue montado.</td><td><code>useCongregationStats.ts:7,41-59</code></td><td><span class="tag t-crit">Crítica</span></td><td><b>Sí</b></td></tr>
+      <tr><td>M6</td><td>7 listados sin paginación: miembros, avisos, perfiles, congregaciones verificadas, candidatos e integrantes.</td><td><code>tenantAdmin.sql:110-146</code>; <code>socialProfiles.sql:55-97,148-174,211-241</code>; <code>newsAnnouncements.sql:15-40</code>; <code>leaderCapabilities.sql:111-157,310-350</code></td><td><span class="tag t-crit">Crítica</span></td><td><b>Sí</b></td></tr>
+      <tr><td>M7</td><td>N+1 lógico: 3 subconsultas correlacionadas por miembro y <code>count()</code> por ministerio.</td><td><code>socialProfiles.sql:78-92</code>; <code>leaderCapabilities.sql:61-72</code></td><td><span class="tag t-high">Alta</span></td><td><b>Sí</b></td></tr>
+      <tr><td>M8</td><td>RLS con funciones por fila (<code>shares_congregation</code>, <code>is_member</code>, <code>is_leader</code>, <code>leads_ministry</code>).</td><td><code>redil_schema.sql:581-695</code></td><td><span class="tag t-high">Alta</span></td><td>Parcial</td></tr>
+      <tr><td>M9</td><td><code>SECURITY DEFINER</code> sin hardening de <code>search_path</code>: 56 apariciones de <code>set search_path = public, extensions</code> vs 19 endurecidas.</td><td><code>tenantAdmin.sql:40,101,122</code>; <code>socialProfiles.sql:163</code>; <code>newsAnnouncements.sql:25</code></td><td><span class="tag t-high">Alta</span></td><td>No (seguridad)</td></tr>
+      <tr><td>M10</td><td><code>bump()</code> global notifica a todos y <code>useAsyncData</code> vuelve a ejecutar el loader; sin abort real de red.</td><td><code>live.ts:27-40</code>; <code>hooks.ts:35-75</code>; <code>repo.ts</code> (8 emisores)</td><td><span class="tag t-high">Alta</span></td><td>Agrava M4-M6</td></tr>
+      <tr><td>M11</td><td>Sync: polling cada 60 s, timeout 15 s, backoff 5→60 s, reintentos infinitos en errores no permanentes.</td><td><code>SyncManager.tsx:19-34</code>; <code>sync.ts:14-16,38-45,63-85</code></td><td><span class="tag t-high">Alta</span></td><td>Latente</td></tr>
+      <tr><td>M12</td><td>Unsplash: key pública en el bundle; cuota demo 50 req/h, producción 1000 req/h.</td><td><code>.env:6</code>; <code>unsplash.ts:20,45-47</code></td><td><span class="tag t-high">Alta</span></td><td>Sí (esa feature)</td></tr>
+      <tr><td>M13</td><td>Bundle inicial: 690.118 B raw / ~205 KB gzip en 15 recursos.</td><td><code>dist/index.html:19-33</code></td><td><span class="tag t-med">Media</span></td><td>No</td></tr>
+      <tr><td>M14</td><td>Sesiones de tenant: insert por login, sin borrado ni expurgado en ningún script.</td><td><code>redil_schema.sql:79-86</code>; <code>tenantAdmin.sql:73-74</code></td><td><span class="tag t-med">Media</span></td><td>No</td></tr>
+      <tr><td>M15</td><td>Doble <code>getSession()</code> en el arranque más RPC de rol.</td><td><code>AuthProvider.tsx:33,36</code>; <code>membership.ts:26-30</code></td><td><span class="tag t-med">Media</span></td><td>No</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Límites del plan: contexto secundario</h3>
+  <p>Esta tabla responde «¿cuánto aguanta el plan?», que <b>no es la pregunta pedida</b>. Se conserva para dimensionar el impacto de las decisiones de código, no para extraer conclusiones sobre viabilidad comercial.</p>
+  <table>
+    <thead><tr><th>Servicio / plan</th><th>Límite verificado</th><th>Consecuencia</th></tr></thead>
+    <tbody>
+      <tr><td>Firebase Hosting Spark</td><td>10 GB storage, <b>360 MB/día</b>, $0,15/GB en Blaze</td><td>Hay que pasar a Blaze para seguir sirviendo; el exceso es diario, no ocasional.</td></tr>
+      <tr><td>Supabase Free / Nano</td><td>500 MB DB, 500 MB RAM, CPU compartida, 5 GB egress, 50k MAU, pausa tras 1 semana inactiva</td><td>Errores de tamaño, latencia por CPU compartida, pausa del proyecto y upgrade por egress.</td></tr>
+      <tr><td>Supabase Nano — conexiones</td><td><b>60 directas</b>, <b>200 clientes de pooler</b>, pool default 15</td><td><code>FATAL: remaining connection slots are reserved...</code>; nuevos clientes rechazados.</td></tr>
+      <tr><td>Supabase Nano — disco</td><td>5 MB/s y 250 IOPS baseline (ráfaga hasta 261 MB/s / 11.800 IOPS)</td><td>Al agotar la ráfaga, los listados completos se estrangulan.</td></tr>
+      <tr><td>Unsplash API</td><td>50 req/h demo, 1000 req/h aprobado; <code>images.unsplash.com</code> no cuenta</td><td><code>429</code> y picker vacío; todos los usuarios comparten la key.</td></tr>
+      <tr><td>Supabase API rate limit</td><td><b>No hay un RPS público verificable</b> en la doc de pricing ("Unlimited API requests")</td><td>No se inventó un número: el cuello verificable es conexiones/RAM/CPU/disco/egress.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout warn">
+    <p><b>Modelo de concurrencia (estimación analítica, no benchmark):</b> 100k usuarios activos con 1 RPC cada 30 s ≈ 3.333 RPS. Por la ley de Little, con p95 de 100 ms hacen falta ~333 conexiones simultáneas; con p95 de 200 ms, ~667. El código hoy genera además 3 RPC para el Home y refetch globales por <code>bump()</code>, así que la demanda real es mayor que 1 RPC por persona. El número de conexiones del plan se menciona solo para dimensionar el efecto de esas decisiones: <b>lo que se quiere saber es si el código se degrada</b>, y con fan-out + listados completos la respuesta es sí.</p>
+  </div>
+
+  <h3>Brechas de índices</h3>
+  <ul class="clean">
+    <li>Existen 11 índices, pero <code>where upper(c.invitation_code) = upper(trim(p_code))</code> (<code>redil_schema.sql:485,508</code>) anula el B-tree normal: falta índice de expresión <code>upper(invitation_code)</code>.</li>
+    <li>No hay índice sobre <code>vify</code> ni parcial <code>where vify</code>, usado por <code>list_verified_congregations*</code> y <code>list_public_news</code>.</li>
+    <li><code>news_idx</code> no incluye <code>is_global</code>: conviene índice compuesto/parcial <code>(congregation_id, is_global, published_at desc)</code>.</li>
+    <li>Falta compuesto <code>(membership_id, ministry_role)</code> para los <code>count()</code>/<code>exists</code> de perfiles y ministerios.</li>
+    <li>El impacto real debe confirmarse con <code>EXPLAIN (ANALYZE, BUFFERS)</code>; la forma de las consultas es incompatible con los índices actuales.</li>
+  </ul>
+
+  <h3>Efecto acumulado del estado local</h3>
+  <ul class="clean">
+    <li><code>redil-stats</code> persiste un objeto por <code>congregationId</code> sin evicción ni cota (<code>StatsStore.ts:28-49</code>): crece en dispositivos compartidos.</li>
+    <li>El token opaco se persiste en <code>localStorage</code> (<code>CongregationStore.ts:5,32-39</code>) y cada login inserta una fila en <code>tenant_sessions</code> sin purga (<code>tenantAdmin.sql:73-74</code>). Estimación: ~10-15 MB por cada 100k logins.</li>
+    <li><code>firebase.json</code> solo define caché para <code>index.html</code> y <code>sw.js</code>; falta <code>Cache-Control: immutable</code> para <code>/assets/*</code> con hash.</li>
+    <li>100k clientes consultando el service worker cada hora (<code>PWAProvider.tsx:51-58</code>) y sincronizando cada 60 s (<code>SyncManager.tsx:19-34</code>) suman tráfico no incluido en la cuenta de precache.</li>
+  </ul>
+
+  <h3>Recomendaciones priorizadas (código primero, plan al final)</h3>
+  <table>
+    <thead><tr><th>Prioridad</th><th>Acción sobre el código</th><th>¿Afecta la robustez?</th></tr></thead>
+    <tbody>
+      <tr><td><b>P0-1</b></td><td>Paginación keyset en los 7 listados (<code>where (created_at,id) &lt; (:cursor,:id) ... limit :n</code>).</td><td><b>Sí</b></td></tr>
+      <tr><td><b>P0-2</b></td><td>Contadores en SQL: RPC <code>get_tenant_counts()</code>; eliminar los 3 listados completos del Home.</td><td><b>Sí</b></td></tr>
+      <tr><td><b>P0-3</b></td><td>Índices de expresión/compuestos indicados arriba + validación con <code>EXPLAIN ANALYZE</code>.</td><td><b>Sí</b></td></tr>
+      <tr><td><b>P0-4</b></td><td>Eliminar N+1: reemplazar las 3 subconsultas correlacionadas por un <code>LEFT JOIN</code> agregado.</td><td><b>Sí</b></td></tr>
+      <tr><td><b>P0-5</b></td><td>Perfil individual por RPC (<code>get_member_profile(p_user_id)</code>) en vez de traer el listado completo.</td><td><b>Sí</b></td></tr>
+      <tr><td><b>P1-1</b></td><td>Canalizar <code>bump()</code> por entidad (la API ya existe en <code>live.ts:27-33</code>) y convertir <code>useAsyncData</code> en SWR con dedupe y <code>AbortController</code>.</td><td><b>Sí</b></td></tr>
+      <tr><td><b>P1-2</b></td><td>Un solo <code>getSession()</code> en el arranque; memoizar membresía/rol con TTL.</td><td>No</td></tr>
+      <tr><td><b>P1-3</b></td><td>Sync robusto: batch, límite de intentos para <b>todos</b> los errores, jitter, <code>Retry-After</code>, tope de outbox.</td><td><b>Sí</b></td></tr>
+      <tr><td><b>P1-4</b></td><td>Endurecer <code>search_path = '', extensions</code> en las 56 apariciones; resolver tenant una vez, no por fila en RLS.</td><td>Parcial</td></tr>
+      <tr><td><b>P2-1</b></td><td>Precache mínimo (app shell), runtime-cache con <code>StaleWhileRevalidate</code> para chunks lazy, quitar duplicados y poner <code>immutable</code> en <code>/assets/*</code>.</td><td><b>Sí</b></td></tr>
+      <tr><td><b>P2-2</b></td><td>Cota/TTL en <code>redil-stats</code> y purga de <code>tenant_sessions</code>.</td><td>No</td></tr>
+      <tr><td><b>P2-3</b></td><td>Unsplash detrás de proxy con caché; quitar búsqueda automática; parámetros <code>w</code>/<code>q</code>/<code>auto=format</code>.</td><td>Sí (feature)</td></tr>
+      <tr><td><b>P2-4</b></td><td>Suite de tests + prueba de carga + observabilidad (p95, conexiones, egress).</td><td>Habilita medirlo</td></tr>
+      <tr><td><b>Contexto</b></td><td>Recién después: pasar a Blaze/CDN y dimensionar Supabase Pro con BFF/edge si las métricas siguen marcando cuello de conexiones.</td><td>No es código</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section id="sucio">
+  <h2>5 · Código sucio y calidad</h2>
+  <p>El proyecto compila (<code>npm run typecheck</code> ✅) y no tiene los markers clásicos: <b>0</b> usos de <code>any</code>, <code>@ts-ignore</code>, <code>TODO</code> o <code>FIXME</code>. El problema es <b>estructural</b>: abstracciones duplicadas, capas difusas, deuda de tamaño y código muerto que todavía arrastra dependencias.</p>
+
+  <div class="cards">
+    <div class="card info"><div class="k">TS/TSX/CSS en <code>src</code></div><div class="v">142</div><div class="s">140 TS/TSX + 2 CSS</div></div>
+    <div class="card warn"><div class="k">&gt;100 líneas</div><div class="v">29</div><div class="s">28 TS/TSX + <code>styles.css</code></div></div>
+    <div class="card good"><div class="k">Markers clásicos</div><div class="v">0</div><div class="s"><code>any</code>, ignore, TODO, FIXME</div></div>
+    <div class="card bad"><div class="k">Tests / lint / script</div><div class="v">0 / 0 / 0</div><div class="s">Sin suite, ESLint ni <code>npm run lint</code></div></div>
+  </div>
+
+  <h3>Duplicación y abstracciones divergentes</h3>
+  <table>
+    <thead><tr><th>ID</th><th>Hallazgo</th><th>Evidencia</th><th>Impacto</th></tr></thead>
+    <tbody>
+      <tr><td>D1</td><td>Hay un <code>callRpc</code> canónico con timeout y errores traducidos, y otra implementación en paralelo.</td><td><code>supabase.ts:38-47</code> vs <code>tenantRpc.ts:13-17</code></td><td><span class="tag t-high">Alto</span> Las llamadas tenant viajan sin <code>withAbort</code> ni <code>toAppError</code>.</td></tr>
+      <tr><td>D2</td><td>El <code>callRpc</code> alternativo es usado por varios servicios tenant.</td><td><code>tenantProfiles.ts</code>, <code>tenantMinistries.ts</code>, <code>tenantMembers.ts</code></td><td><span class="tag t-high">Alto</span> Multiplica D1.</td></tr>
+      <tr><td>D4</td><td>El token se lee en 3 lugares con validaciones distintas: uno chequea vencimiento, dos solo presencia.</td><td><code>tenantRpc.ts:6-11</code>; <code>socialProfiles.ts:26-30</code>; <code>leaderMinistries.ts:83-85</code></td><td><span class="tag t-high">Alto</span> Un token vencido puede llegar al backend desde la rama líder.</td></tr>
+      <tr><td>D10</td><td><code>isTenant = Boolean(congregation)</code> se replica en 9 hooks y varias vistas.</td><td><code>useDashboardView.ts:22</code>, <code>useAnnouncementsView.ts:18</code>, <code>useDirectoryView.ts:49</code>, <code>MembersView.tsx:27</code>, etc.</td><td><span class="tag t-high">Alto</span> La política de sesión se decide en cada rincón.</td></tr>
+      <tr><td>D5-D8</td><td>Helper <code>rows()</code> duplicado, 4 mapeadores fila→miembro, normalizadores de rol inline y <code>initials()</code> triplicado con salida distinta.</td><td><code>socialProfiles.ts:23-25</code>; <code>ministryMappers.ts:5-7,24-32</code>; <code>format.ts:131-138</code>; <code>ProfileView.tsx:30-37</code>; <code>DirectoryView.tsx:9-16</code></td><td><span class="tag t-med">Medio</span> Divergencia de campos, defaults e iniciales entre pantallas.</td></tr>
+      <tr><td>D9</td><td>Cinco vocabularios de roles conviviendo (locales vs. tenant).</td><td><code>lib/types.ts:1-17</code>; <code>RoleBadge.tsx:3-9</code>; <code>TenantMemberList.tsx:9-13</code>; <code>MembersSection.tsx:65-67</code></td><td><span class="tag t-med">Medio</span> Traducciones y permisos dispersos.</td></tr>
+      <tr><td>D11</td><td>Patrón <code>Notice</code>/busy reimplementado en tres viewmodels.</td><td><code>useActionRunner.ts:4,14-32</code>; <code>useAnnouncementsView.ts:36-72</code>; <code>useAccountSettings.ts:24-46</code></td><td><span class="tag t-med">Medio</span> State de UI repetido.</td></tr>
+      <tr><td>D12</td><td>Infraestructura de canales del <code>bump()</code> creada pero sin ningún consumidor: 20 llamadas globales, 0 usos de <code>channel:</code>.</td><td><code>lib/hooks.ts:9-16,24-27,41</code>; <code>lib/live.ts:27</code>; <code>CONTEXTO.md:1842-1843</code></td><td><span class="tag t-med">Medio</span> Cualquier write recarga todo (ver eje 4).</td></tr>
+      <tr><td>D13</td><td>Adaptador tenant/líder <b>correcto</b>: centraliza la decisión fuera de la vista.</td><td><code>ministryActions.ts:17-54</code></td><td><span class="tag t-ok">Patrón a preservar</span></td></tr>
+    </tbody>
+  </table>
+
+  <h3>Markers, comentarios y código muerto</h3>
+  <table>
+    <thead><tr><th>Ítem</th><th>Resultado</th></tr></thead>
+    <tbody>
+      <tr><td><code>any</code>, <code>@ts-ignore</code>, <code>@ts-expect-error</code>, <code>TODO</code>, <code>FIXME</code></td><td><span class="tag t-ok">0</span> en <code>src</code>. El conteo preliminar de 23 fue un falso positivo por búsqueda sin distinción de mayúsculas.</td></tr>
+      <tr><td><code>eslint-disable</code></td><td>1, justificado: <code>lib/hooks.ts:74</code> (<code>react-hooks/exhaustive-deps</code>, explicado en <code>:73</code>).</td></tr>
+      <tr><td><code>console.*</code></td><td>4 (<code>supabase.ts:18</code>, <code>login.ts:41,98</code>, <code>lib/settings.tsx:32</code>). Sin logger central. Los <code>console.log</code> están solo en <code>scripts/generate-icons.mjs</code>.</td></tr>
+      <tr><td><code>SyncBadge</code></td><td>Muerto: import y JSX comentados en <code>Layout.tsx:6,72,100</code>; componente sin consumidor en <code>SyncBadge.tsx:14</code>.</td></tr>
+      <tr><td><code>useSettingsView</code> y cadena asociada</td><td>189 líneas sin consumidor (<code>useSettingsView.ts:16</code>); arrastra <code>lib/backup.ts</code> y <code>lib/api.ts</code>. <code>lib/sync.ts</code> sí sigue activo vía <code>SyncManager</code>.</td></tr>
+      <tr><td><code>src/pages/*</code></td><td>7 archivos legacy sin enlaces: las rutas usan <code>lazyViews</code> → <code>src/views/*</code> (<code>AppRoutes.tsx:10-14,49-82</code>). Suman 1.729 líneas; 5 de ellos &gt;100 concentran 1.707.</td></tr>
+      <tr><td>Comentarios desactualizados</td><td><code>CongregationStore.ts:4</code> dice que el RPC no devuelve <code>expires_at</code>; <code>useProfileView.ts:15</code> menciona «Mi hola»; <code>CONTEXTO.md:1867-1869</code> asegura que todo lo nuevo quedó ≤100 líneas, contradicho por 10 archivos.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Violaciones de capas</h3>
+  <ul class="clean">
+    <li>El guard central de sesión (<code>AppRoutes.tsx:16-38</code>, <code>MemberAccessGuard.tsx:20-64</code>) convive con decisiones de permisos replicadas en <code>DashboardView.tsx:53,73,78,81</code>, <code>SettingsView.tsx:24,35,39</code>, <code>ProfileView.tsx:118,167,244</code>, <code>MinistriesView.tsx:26,30,45</code>, <code>DirectoryView.tsx:86-104,195</code>, <code>MembersView.tsx:26-31,42</code>.</li>
+    <li><code>PrincipalView.tsx:6,41</code> llama a <code>loginWithGoogle()</code> desde una vista; <code>MembersView.tsx:17,19,26,142</code> decide rama tenant/local y ejecuta borrado; <code>AccessRequiredView.tsx:6,17</code> lee el store de sesión.</li>
+    <li>Hooks con estado de UI: <code>useProfileEditor.ts:43-51</code>, <code>useCalendarView.ts:68-72</code>, <code>useEventsView.ts:8-10</code>, <code>useMembersView.ts:14-17</code>, <code>useAnnouncementsView.ts:20-24</code>.</li>
+    <li>Services acoplados a stores React: <code>tenantRpc.ts:2,7</code>, <code>socialProfiles.ts:2,27</code>, <code>leaderMinistries.ts:2,83</code>, <code>membership.ts:4,57</code> (escribe), <code>congregationStats.ts:2,26,29</code> (lee y escribe).</li>
+    <li>Doble fuente de verdad: avisos/perfiles vía RPC, miembros/eventos en IndexedDB (<code>lib/repo.ts</code>), ya documentado en <code>CONTEXTO.md:1732-1734</code>.</li>
+    <li>Componentes activos grandes: <code>CongregationAccess.tsx</code> 304, <code>ProfileView.tsx</code> 262, <code>CalendarView.tsx</code> 209, <code>DirectoryView.tsx</code> 205, <code>QrScannerPanel.tsx</code> 159, <code>MembersView.tsx</code> 148, <code>CodeView.tsx</code> 129.</li>
+  </ul>
+
+  <h3>Dependencias y scripts</h3>
+  <table>
+    <thead><tr><th>Ítem</th><th>Evidencia</th><th>Observación</th></tr></thead>
+    <tbody>
+      <tr><td>Scripts</td><td><code>package.json:7-14</code></td><td><code>dev</code>, <code>build</code>, <code>preview</code>, <code>typecheck</code>, <code>deploy</code>, <code>icons</code>. Faltan <code>lint</code>, <code>test</code> y <code>format</code>.</td></tr>
+      <tr><td>Tres motores de estilos</td><td><code>package.json:17,21,30</code></td><td>Emotion, <code>@mui/styled-engine-sc</code> y <code>styled-components</code>; no hay <code>StyledEngineProvider</code> ni imports directos: el tercero está sin cablear.</td></tr>
+      <tr><td>Dos librerías de iconos</td><td><code>package.json:19,27</code>; <code>Layout.tsx:7</code></td><td><code>@mui/icons-material</code> en ~30 archivos; <code>react-icons</code> solo para <code>TbLogout2</code>, con comillas dobles y <code>;</code> (estilo distinto).</td></tr>
+      <tr><td>Versión discontinua</td><td><code>package.json:25,28</code></td><td><code>react@19.3.1</code> convive con <code>react-is@18.3.1</code>. Puede ser transitiva: no verificado.</td></tr>
+      <tr><td>Carets en mayores recientes</td><td><code>package.json:19-20,25,38-39</code></td><td>Vite 8, TypeScript 7, MUI 9, React 19: riesgo de ruptura en futuros install. No verificado contra el registry.</td></tr>
+      <tr><td>Typecheck parcial</td><td><code>tsconfig.json:23</code></td><td>Incluye <code>src</code> y <code>vite.config.ts</code>; <code>scripts/**</code> queda fuera.</td></tr>
+      <tr><td>Script de iconos</td><td><code>scripts/generate-icons.mjs</code> 369 líneas</td><td>Codec PNG propio (<code>:28-60</code>) y <code>rmSync</code> destructivo (<code>:367</code>). Fuera del build.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Deuda documentada que ya no coincide con el repo</h3>
+  <table>
+    <thead><tr><th>Referencia</th><th>Estado</th></tr></thead>
+    <tbody>
+      <tr><td><code>CONTEXTO.md:1980-1982</code>, <code>:2079-2082</code> — re-ejecutar SQL con <code>revoke ... from anon</code></td><td><span class="tag t-crit">Pendiente</span> No se pudo verificar en la DB en vivo.</td></tr>
+      <tr><td><code>CONTEXTO.md:1879-1880</code>, <code>:2049</code> — rotar OAuth client</td><td><span class="tag t-ok">Resuelto</span> El usuario modificó el client y confirmó que no presenta riesgo.</td></tr>
+      <tr><td><code>CONTEXTO.md:1885</code>, <code>:1992</code> — «no hay repo git»</td><td><span class="tag t-med">Desactualizado</span> Hay 2 commits (<code>d4dcaa5</code>, <code>5f1daf7</code>).</td></tr>
+      <tr><td><code>CONTEXTO.md:807</code> — ministerios deshabilitado; <code>:818</code> — <code>rol: 2</code>; <code>:1694-1696</code> — sin SPA fallback</td><td><span class="tag t-ok">Resueltos</span> Ruta activa, <code>rol: null</code> y rewrite de Firebase.</td></tr>
+      <tr><td><code>CONTEXTO.md:1867-1869</code> — «todos los TS/TSX tocados ≤100 líneas»</td><td><span class="tag t-high">Contradicho</span> por 10 archivos del 17–18/11.</td></tr>
+      <tr><td><code>CONTEXTO.md:52,589,469,1697</code> — código de invitación, email, project ref y token parcial en docs</td><td><span class="tag t-high">Podar / rotar</span> Son datos identificativos o credenciales de prueba.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Hallazgos priorizados</h3>
+  <table>
+    <thead><tr><th>Sev.</th><th>Hallazgo</th><th>Acción</th></tr></thead>
+    <tbody>
+      <tr><td><span class="tag t-high">Alta</span></td><td>Revoke de <code>anon</code> corregido solo en <code>socialProfiles.sql</code>; <code>newsAnnouncements.sql</code> todavía revoca únicamente <code>from public</code> y nada está verificado en vivo.</td><td>Corregir <code>newsAnnouncements.sql</code>, re-ejecutar ambos y auditar <code>information_schema.role_routine_grants</code>.</td></tr>
+      <tr><td><span class="tag t-high">Alta</span></td><td><code>callRpc</code> tenant y validación de token duplicados (D1, D2, D4).</td><td>Hacer que <code>tenantRpc</code> delegue en el <code>callRpc</code> canónico y usar un único <code>requireToken()</code>.</td></tr>
+      <tr><td><span class="tag t-high">Alta</span></td><td>Política de sesión replicada entre guard, vistas y hooks (D10).</td><td>Un único <code>useSessionKind()</code>.</td></tr>
+      <tr><td><span class="tag t-high">Alta</span></td><td>Deuda de tamaño en código activo nuevo y en legacy muerto.</td><td>Split de <code>ProfileView</code>, <code>CalendarView</code>, <code>DirectoryView</code>; borrar <code>src/pages/*</code>.</td></tr>
+      <tr><td><span class="tag t-med">Media</span></td><td><code>initials()</code> triplicado, 5 vocabularios de roles, canales sin uso, código muerto, 3 motores de estilo y 2 de iconos, sin lint/tests.</td><td>Unificar helpers y mapas; elegir Emotion + MUI icons; agregar ESLint y <code>tsconfig</code> para scripts.</td></tr>
+      <tr><td><span class="tag t-low">Baja</span></td><td><code>eslint-disable</code> justificado, 4 <code>console.*</code> sin logger, estilo distinto en <code>Layout.tsx:7</code>, comentarios históricos.</td><td>Limpieza de menor prioridad.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout">
+    <p><b>No verificado:</b> ejecución real de los SQL y estado efectivo de los grants, <code>npm audit</code>/<code>npm outdated</code>, imports sin usar detectables por ESLint (no hay ESLint configurado) y comportamiento real en iOS/PWA. <b>Sí verificado por el usuario:</b> login con Google en el último deploy y OAuth client sin riesgo. <code>npm run typecheck</code> pasó sin errores.</p>
+  </div>
+
+  <div class="callout">
+    <p><b>Plan de refactoring:</b> la sección <a href="#refactoring">8 · Plan de refactoring</a> detalla cómo llevar cada archivo a ≤100 líneas, unificar abstracciones duplicadas y borrar código muerto, con criterios de verificación por fase.</p>
+  </div>
+</section>
+
+<section id="archivos">
+  <h2>6 · Amplitud de los archivos (líneas de código)</h2>
+  <p>Medición sobre el árbol de fuentes excluyendo <code>node_modules</code> y <code>dist</code>. El conteo incluye líneas en blanco y comentarios, que es el criterio conservador para la regla interna de «ningún archivo TS/TSX tocado &gt; 100 líneas».</p>
+
+  <div class="cards">
+    <div class="card info"><div class="k">TS + TSX</div><div class="v">11.361</div><div class="s">140 archivos</div></div>
+    <div class="card info"><div class="k">CSS</div><div class="v">2.029</div><div class="s">2 archivos</div></div>
+    <div class="card info"><div class="k">SQL</div><div class="v">2.856</div><div class="s">13 archivos</div></div>
+    <div class="card info"><div class="k">Documentación</div><div class="v">2.639</div><div class="s">CONTEXTO + README</div></div>
+    <div class="card bad"><div class="k">&gt;100 líneas</div><div class="v">28</div><div class="s">20 % del total TS/TSX</div></div>
+    <div class="card good"><div class="k">≤100 líneas</div><div class="v">112</div><div class="s">80 % del total TS/TSX</div></div>
+  </div>
+
+  <h3>Distribución por directorio</h3>
+  <table>
+    <thead><tr><th>Directorio</th><th>Archivos</th><th>Líneas</th><th>Participación</th></tr></thead>
+    <tbody>
+      <tr><td><code>src/features/</code></td><td>74</td><td>4.950</td><td><div class="bar"><i style="width:100%"></i></div>43,6 %</td></tr>
+      <tr><td><code>src/views/</code></td><td>17</td><td>1.738</td><td><div class="bar"><i style="width:35%"></i></div>15,3 %</td></tr>
+      <tr><td><code>src/pages/</code> <span class="tag t-med">legacy</span></td><td>7</td><td>1.729</td><td><div class="bar"><i style="width:35%"></i></div>15,2 %</td></tr>
+      <tr><td><code>src/lib/</code></td><td>13</td><td>1.238</td><td><div class="bar"><i style="width:25%"></i></div>10,9 %</td></tr>
+      <tr><td><code>src/components/</code></td><td>11</td><td>892</td><td><div class="bar"><i style="width:18%"></i></div>7,9 %</td></tr>
+      <tr><td><code>src/app/</code></td><td>5</td><td>282</td><td><div class="bar"><i style="width:6%"></i></div>2,5 %</td></tr>
+      <tr><td><code>src/supabase/</code></td><td>2</td><td>147</td><td><div class="bar"><i style="width:3%"></i></div>1,3 %</td></tr>
+      <tr><td><code>src/pwa/</code></td><td>1</td><td>128</td><td><div class="bar"><i style="width:3%"></i></div>1,1 %</td></tr>
+      <tr><td><code>src/store/</code></td><td>3</td><td>126</td><td><div class="bar"><i style="width:3%"></i></div>1,1 %</td></tr>
+      <tr><td><code>src/theme/</code> + <code>src/interfaces/</code></td><td>4</td><td>83</td><td><div class="bar"><i style="width:2%"></i></div>0,7 %</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Los 28 archivos que superan las 100 líneas</h3>
+  <table>
+    <thead><tr><th>#</th><th>Archivo</th><th>Líneas</th><th>Observación</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td><code>src/pages/Settings.tsx</code></td><td>535</td><td>Pantalla legacy; la activa es <code>views/SettingsView</code></td></tr>
+      <tr><td>2</td><td><code>src/pages/Events.tsx</code></td><td>372</td><td>Pantalla legacy</td></tr>
+      <tr><td>3</td><td><code>src/pages/Members.tsx</code></td><td>354</td><td>Pantalla legacy</td></tr>
+      <tr><td>4</td><td><code>src/features/congregations/components/CongregationAccess.tsx</code></td><td>304</td><td>Deuda funcional</td></tr>
+      <tr><td>5</td><td><code>src/views/ProfileView.tsx</code></td><td>262</td><td>Vista activa; candidata a separar</td></tr>
+      <tr><td>6</td><td><code>src/pages/Announcements.tsx</code></td><td>260</td><td>Pantalla legacy</td></tr>
+      <tr><td>7</td><td><code>src/lib/repo.ts</code></td><td>249</td><td>CRUD IndexedDB + outbox</td></tr>
+      <tr><td>8</td><td><code>src/components/Icons.tsx</code></td><td>223</td><td>Mapa de iconos</td></tr>
+      <tr><td>9</td><td><code>src/views/CalendarView.tsx</code></td><td>196</td><td>Vista activa</td></tr>
+      <tr><td>10</td><td><code>src/views/DirectoryView.tsx</code></td><td>189</td><td>Vista activa; no se tocó por el límite</td></tr>
+      <tr><td>11</td><td><code>src/features/settings/hooks/useSettingsView.ts</code></td><td>189</td><td>Viewmodel</td></tr>
+      <tr><td>12</td><td><code>src/pages/Dashboard.tsx</code></td><td>186</td><td>Pantalla legacy</td></tr>
+      <tr><td>13</td><td><code>src/features/congregations/components/QrScannerPanel.tsx</code></td><td>159</td><td>Scanner QR</td></tr>
+      <tr><td>14</td><td><code>src/features/profile/hooks/useProfileEditor.ts</code></td><td>157</td><td>Editor de perfil</td></tr>
+      <tr><td>15</td><td><code>src/lib/backup.ts</code></td><td>149</td><td>Export/import</td></tr>
+      <tr><td>16</td><td><code>src/views/MembersView.tsx</code></td><td>148</td><td>Vista activa</td></tr>
+      <tr><td>17</td><td><code>src/lib/format.ts</code></td><td>148</td><td>Utilidades</td></tr>
+      <tr><td>18</td><td><code>src/features/members/components/MemberFormDialog.tsx</code></td><td>142</td><td>Formulario</td></tr>
+      <tr><td>19</td><td><code>src/features/calendar/hooks/useCalendarView.ts</code></td><td>141</td><td>Viewmodel</td></tr>
+      <tr><td>20</td><td><code>src/features/profile/hooks/useProfileView.ts</code></td><td>137</td><td>Viewmodel</td></tr>
+      <tr><td>21</td><td><code>src/components/Layout.tsx</code></td><td>131</td><td>Shell + nav</td></tr>
+      <tr><td>22</td><td><code>src/views/CodeView.tsx</code></td><td>129</td><td>Vista activa</td></tr>
+      <tr><td>23</td><td><code>src/pwa/PWAProvider.tsx</code></td><td>128</td><td>Provider</td></tr>
+      <tr><td>24</td><td><code>src/features/congregations/components/AccessRequiredModal.tsx</code></td><td>123</td><td>Modal R7</td></tr>
+      <tr><td>25</td><td><code>src/features/congregations/hooks/useLatinAmericaLocations.ts</code></td><td>122</td><td>Datos geo</td></tr>
+      <tr><td>26</td><td><code>src/features/events/components/EventFormDialog.tsx</code></td><td>117</td><td>Formulario</td></tr>
+      <tr><td>27</td><td><code>src/components/Modal.tsx</code></td><td>113</td><td>Modal custom</td></tr>
+      <tr><td>28</td><td><code>src/features/social/hooks/useDirectoryView.ts</code></td><td>112</td><td>Viewmodel cross-tenant</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout">
+    <p><b>Interpretación:</b> la regla de ≤100 líneas se respetó en los archivos nuevos puntuales (<code>MemberProfileView.tsx</code> 74, <code>useMemberProfileView.ts</code> 30, <code>DashboardView.tsx</code> 93), pero <b>10 archivos creados el 17–18/11 también superan el umbral</b> y <code>CONTEXTO.md:1867-1869</code> los declara deuda preexistente en parte. Contando CSS son 29 archivos &gt;100: los 28 TS/TSX de la tabla más <code>src/styles.css</code> (2.029). El foco de limpieza debería empezar por <code>src/pages/</code>: 7 archivos y 1.729 líneas que hoy no son el punto de entrada de las rutas.</p>
+  </div>
+</section>
+
+<section id="rendimiento">
+  <h2>7 · ¿El código aguanta 100.000 usuarios simultáneos?</h2>
+  <p><b>Pregunta del usuario:</b> no se trata de decidir si hoy alcanza el plan de Supabase, sino de saber si el código está preparado para tanta concurrencia <b>sin romperse ni lagearse</b>. Interpretación adoptada: <b>100.000 personas activas al mismo tiempo</b>, no solo cuentas registradas. Todas las cifras son <b>estimaciones analíticas</b> sobre el bundle real y los límites publicados; no hay pruebas de carga ejecutadas.</p>
+
+  <div class="kpi-row">
+    <div class="big">No preparado</div>
+    <p>Respuesta corta: el código tiene fan-out de refetch, listados completos y un precache que anula el code splitting. Las proyecciones de esta sección —<b>~145 GB</b> por oleada, <b>403×</b> el cupo diario, <b>~248</b> instalaciones frías— son evidencia de apoyo, <b>no la conclusión</b>.</p>
+  </div>
+
+  <h3>La cuenta, paso a paso</h3>
+  <table>
+    <thead><tr><th>Escenario</th><th>Cálculo</th><th>Resultado</th><th>Lectura para el código</th></tr></thead>
+    <tbody>
+      <tr><td><b>Instalación fría de la PWA</b></td><td>100.000 × 1,45 MB de precache (81 archivos únicos)</td><td><b>~145 GB</b> (141,6 GiB)</td><td><span class="tag t-crit">Precache pesado</span> El code splitting queda anulado.</td></tr>
+      <tr><td><b>Lo mismo con gzip en JS/CSS/HTML</b></td><td>100.000 × 0,78 MB modelados en wire</td><td><b>~78 GB</b></td><td><span class="tag t-high">Mitigable</span> Recortar el precache baja la carga.</td></tr>
+      <tr><td><b>Usuarios nuevos por día que agotan el cupo</b></td><td>360 MB ÷ 1,45 MB por instalación</td><td><b>~248 instalaciones/día</b></td><td><span class="tag t-med">Contexto de plan</span> No mide robustez.</td></tr>
+      <tr><td><b>Retorno con caché tibio</b> (solo HTML + verificación del service worker)</td><td>100.000 × ~5 KB</td><td><b>~500 MB/día</b></td><td><span class="tag t-med">Contexto de plan</span> El SW se consulta cada hora.</td></tr>
+      <tr><td><b>Tráfico de API</b> (10 RPC × ~10 KB por sesión)</td><td>100.000 × 100 KB</td><td><b>~10 GB</b></td><td><span class="tag t-crit">Fan-out</span> El front llama directo y sin coalescing.</td></tr>
+      <tr><td><b>Usuarios activos por mes</b></td><td>100.000 MAU</td><td><b>100k</b></td><td><span class="tag t-med">Contexto de plan</span></td></tr>
+      <tr><td><b>Almacenamiento estático</b></td><td>1,82 MB por build × N versiones</td><td><b>&lt; 10 GB</b> salvo cientos de builds</td><td><span class="tag t-ok">Sin problema</span></td></tr>
+    </tbody>
+  </table>
+
+  <h3>Límites del plan (documentación oficial, 24/11/2026 · contexto)</h3>
+  <div class="grid2">
+    <div class="panel">
+      <h4>Firebase Hosting — plan Spark</h4>
+      <table>
+        <tbody>
+          <tr><td>Storage</td><td><b>10 GB</b></td></tr>
+          <tr><td>Transferencia</td><td><b>360 MB/día</b></td></tr>
+          <tr><td>Dominio + SSL</td><td>Incluido</td></tr>
+          <tr><td>Blaze: excedente</td><td><b>$0,15/GB</b> (10 GB gratis/mes)</td></tr>
+          <tr><td>Historial</td><td>Permite rollback de deploys</td></tr>
+        </tbody>
+      </table>
+      <p style="margin-top:12px">Fuente: <a href="https://firebase.google.com/pricing" target="_blank" rel="noopener">firebase.google.com/pricing</a>.</p>
+    </div>
+    <div class="panel">
+      <h4>Supabase — plan Free</h4>
+      <table>
+        <tbody>
+          <tr><td>Base de datos</td><td><b>500 MB</b> (CPU compartida, 500 MB RAM)</td></tr>
+          <tr><td>MAU</td><td><b>50.000</b> incluidos</td></tr>
+          <tr><td>Egress</td><td><b>5 GB</b> + 5 GB caché</td></tr>
+          <tr><td>Realtime</td><td><b>200</b> conexiones pico</td></tr>
+          <tr><td>Edge Functions</td><td>500.000 invocaciones</td></tr>
+          <tr><td>Pausa</td><td>Sin actividad 1 semana</td></tr>
+        </tbody>
+      </table>
+      <p style="margin-top:12px">Fuente: <a href="https://supabase.com/pricing" target="_blank" rel="noopener">supabase.com/pricing</a>.</p>
+    </div>
+  </div>
+
+  <div class="callout warn">
+    <p><b>El cuello del código es la concurrencia de Postgres, no el ancho de banda.</b> Hoy cada interacción puede disparar varios RPC, refetch globales y listados completos. Las conexiones del pooler van de 200 (Micro) a 6.000 (8XL dedicado): ni el mayor tamaño da una relación 1:1 usuario/conexión, así que hacen falta <b>caché, coalescing y menos llamadas</b>, no solo más CPU. El costo estimado de escalar infraestructura (Pro $25 + 8XL ~$1.870 ≈ <b>$1.895/mes</b> antes de egress) queda al final de la hoja de ruta, como contexto posterior a las optimizaciones.</p>
+  </div>
+
+  <h3>Cuellos de botella detectados en el código</h3>
+  <table>
+    <thead><tr><th>Cuello</th><th>Evidencia</th><th>Impacto a escala</th></tr></thead>
+    <tbody>
+      <tr><td><b>Listados sin paginación</b></td><td>RPCs de perfiles y avisos devuelven el conjunto completo; no hay parámetros <code>limit</code>/<code>cursor</code>.</td><td>Respuestas que crecen con el tenant; 100k usuarios en el mismo tenant sería inviable.</td></tr>
+      <tr><td><b>Conteos recalculados</b></td><td>Contadores del Home se cachean 5 min en <code>localStorage</code> por congregación, pero el cálculo inicial recorre datos.</td><td>Cada tenant paga el costo; sin agregados en DB el costo crece con el total de filas.</td></tr>
+      <tr><td><b>Precache completo</b></td><td><code>workbox.globPatterns</code> precachea 86 entradas (81 únicas) / ~1,45 MB, incluyendo todos los chunks lazy, iconos y fuentes (<code>vite.config.ts:88-95</code>).</td><td>145 GB en una oleada de 100k instalaciones; fuente principal del exceso de Spark. El code splitting queda anulado en la práctica.</td></tr>
+      <tr><td><b>Contadores del Home</b></td><td><code>fetchCongregationCounts()</code> trae 3 listados completos para derivar 4 números (<code>congregationStats.ts:10-21</code>) con TTL de 5 min (<code>useCongregationStats.ts:7,41-59</code>).</td><td>Se descarga toda la congregación para contar; ~1000 RPS estimados si 100k tenants refrescan cada 5 min.</td></tr>
+      <tr><td><b>Fan-out de <code>bump()</code></b></td><td>El evento global notifica a todos los <code>useAsyncData</code> y vuelve a ejecutar sus loaders, sin dedupe ni abort real (<code>live.ts:27-40</code>, <code>hooks.ts:35-75</code>).</td><td>Guardar un miembro en IndexedDB dispara recargas de Directory, Ministerios y Stats.</td></tr>
+      <tr><td><b>Reintentos sin techo</b></td><td>El descarte exige <code>isPermanentFailure()</code>; 429/5xx/red se reencolan indefinidamente (<code>sync.ts:38-45,63-85</code>).</td><td>Bajo rate limiting amplifica la carga en vez de aplanarla.</td></tr>
+      <tr><td><b>Key de Unsplash compartida</b></td><td>Key pública en el bundle (<code>unsplash.ts:20,45-47</code>); cuota demo 50 req/h, producción 1000 req/h.</td><td>100k usuarios compiten por un único cupo global; el picker busca automáticamente al abrir.</td></tr>
+      <tr><td><b>RLS por fila</b></td><td>Policies con verificaciones de membresía por fila sobre tablas grandes.</td><td>CPU de Postgres crece con el número de filas leídas, no con el de usuarios.</td></tr>
+      <tr><td><b>Sin capa de caché intermedia</b></td><td>No hay CDN de API ni caché de RPC; el front llama directo a Supabase.</td><td>Cada interacción consume conexión y egress del plan.</td></tr>
+      <tr><td><b>Outbox con timeout de 15 s y backoff</b></td><td><code>src/lib/sync.ts</code> reintenta entre 5 s y 60 s.</td><td>En desconexión masiva genera picos de reintentos al volver la red.</td></tr>
+      <tr><td><b>Imágenes remotas</b></td><td>Unsplash se consume desde el cliente con Access Key pública en el bundle.</td><td>Cuota de la key compartida; sin caché propia ni transformaciones.</td></tr>
+      <tr><td><b>0 tests</b></td><td>No hay archivos <code>*.test.*</code> ni <code>*.spec.*</code>.</td><td>Cualquier optimización de escala no tiene red de seguridad.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Hoja de ruta para que el código aguante 100k (priorizada)</h3>
+  <table>
+    <thead><tr><th>#</th><th>Acción sobre el código</th><th>Qué evita</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td><b>Paginación keyset</b> (<code>WHERE id &lt; cursor ORDER BY id DESC LIMIT n</code>) en todos los listados.</td><td>Respuestas que crecen sin límite.</td></tr>
+      <tr><td>2</td><td><b>Agregados en SQL</b> para contadores del Home (<code>get_tenant_counts()</code>).</td><td>Descargar la congregación para contar.</td></tr>
+      <tr><td>3</td><td><b>Perfil individual por RPC</b> (<code>get_member_profile(p_user_id)</code>).</td><td>N+1 y listados completos por cada perfil.</td></tr>
+      <tr><td>4</td><td><b>Índices compuestos y de expresión</b>, validados con <code>EXPLAIN ANALYZE</code>.</td><td>RLS por fila sobre tablas grandes.</td></tr>
+      <tr><td>5</td><td><b>Canalizar <code>bump()</code></b> por entidad y migrar <code>useAsyncData</code> a SWR con dedupe y <code>AbortController</code>.</td><td>Refetch global y picos de red al escribir.</td></tr>
+      <tr><td>6</td><td><b>Sync con jitter, <code>Retry-After</code> y tope de reintentos</b>, más cota/TTL en <code>redil-stats</code> y purga de sesiones.</td><td>Amplificación de carga al volver la red.</td></tr>
+      <tr><td>7</td><td><b>Precache mínimo</b> + <code>immutable</code> en assets + caché de Unsplash.</td><td>145 GB por oleada y cuota compartida.</td></tr>
+      <tr><td>8</td><td><b>Suite de tests + prueba de carga + observabilidad</b> (p95, conexiones, egress).</td><td>No poder detectar regresiones ni medir el resultado.</td></tr>
+      <tr><td>9</td><td><b>Solo después, si hace falta:</b> CDN/Blaze, Supabase Pro dimensionado y BFF/edge con pool acotado.</td><td>Límites del plan (contexto, no eje).</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section id="refactoring">
+  <h2>8 · Plan de refactoring: archivos ≤100 líneas</h2>
+  <p>Objetivo: cumplir la regla interna de que <b>ningún archivo TS/TSX tocado supere las 100 líneas</b> sin romper comportamiento. Hoy hay <b>28</b> archivos TS/TSX sobre el umbral (29 contando <code>styles.css</code>). Es deuda preexistente y no bloquea el deploy, pero concentra el riesgo en <code>src/pages/*</code> y en tres vistas activas. Cada fase se cierra con <code>npm run typecheck</code> ✅ y el conteo de líneas por archivo: <b>lo que se toca queda dentro del límite</b>.</p>
+
+  <h3>Principios de la división</h3>
+  <ul class="clean">
+    <li><b>Vistas puras:</b> <code>src/views/*</code> siguen sin importar Supabase ni decidir permisos; la lógica va a hooks y servicios.</li>
+    <li><b>Extraer por responsabilidad, no por corte arbitrario:</b> primero componentes de presentación, luego hooks de estado y al final constantes/datos a módulos propios.</li>
+    <li><b>Sin cambios de comportamiento:</b> cada fase es un commit reversible; se preservan rutas, textos y reglas de negocio.</li>
+    <li><b>Aprovechar lo que ya existe:</b> <code>ministryActions.ts:17-54</code> es el patrón a seguir: la decisión tenant/líder queda fuera de la vista.</li>
+  </ul>
+
+  <h3>Fases</h3>
+  <table>
+    <thead><tr><th>Fase</th><th>Archivos objetivo</th><th>Qué se extrae</th><th>Verificación</th></tr></thead>
+    <tbody>
+      <tr><td><b>F0 · Preparación</b></td><td><code>package.json</code>, <code>tsconfig.json</code></td><td>Agregar scripts <code>lint</code>, <code>test</code> y <code>format</code>; incluir <code>scripts/**</code> en typecheck. Unificar los 3 motores de estilo en Emotion y las 2 librerías de iconos en <code>@mui/icons-material</code> (reemplazar <code>TbLogout2</code>).</td><td><code>npm run lint</code> y <code>npm run typecheck</code> sin errores.</td></tr>
+      <tr><td><b>F1 · Código muerto</b></td><td><code>src/pages/*</code> (7 / 1.729 líneas), <code>SyncBadge.tsx</code>, <code>useSettingsView.ts</code>, <code>lib/backup.ts</code>, <code>lib/api.ts</code></td><td>Borrar pantallas legacy sin enlaces y la cadena sin consumidor. Es la reducción más grande y la de menor riesgo: las rutas usan <code>lazyViews</code> → <code>src/views/*</code>.</td><td>0 imports rotos; las 20 rutas siguen respondiendo; −1.729 líneas.</td></tr>
+      <tr><td><b>F2 · Abstracciones compartidas</b></td><td><code>tenantRpc.ts</code>, <code>socialProfiles.ts</code>, <code>leaderMinistries.ts</code>, <code>format.ts</code>, <code>ProfileView.tsx</code>, <code>DirectoryView.tsx</code></td><td>Un único <code>callRpc</code> canónico con timeout y traducción, un <code>requireToken()</code>, un <code>useSessionKind()</code>, un <code>initials()</code> y un mapa de roles. Quitar los 5 vocabularios divergentes.</td><td>Las 14 llamadas <code>callRpc(</code> pasan por la misma implementación; 0 lecturas de token fuera del helper.</td></tr>
+      <tr><td><b>F3 · Vistas grandes</b></td><td><code>ProfileView.tsx</code> (262), <code>CalendarView.tsx</code> (196), <code>DirectoryView.tsx</code> (189), <code>MembersView.tsx</code> (148), <code>CodeView.tsx</code> (129)</td><td>Extraer <code>*Header</code>, <code>*List</code> y <code>*Dialog</code> a <code>src/components/</code>; dejar la vista como composición. Los viewmodels (<code>useProfileView</code> 137, <code>useCalendarView</code> 141, <code>useDirectoryView</code> 112) se dividen en loader + actions + estado de UI.</td><td>Cada archivo ≤100 líneas; mismos props y salida visual.</td></tr>
+      <tr><td><b>F4 · Componentes y utilidades grandes</b></td><td><code>CongregationAccess.tsx</code> (304), <code>QrScannerPanel.tsx</code> (159), <code>Layout.tsx</code> (131), <code>Icons.tsx</code> (223), <code>Modal.tsx</code> (113), <code>repo.ts</code> (249), <code>lib/format.ts</code> (148), <code>PWAProvider.tsx</code> (128)</td><td>Separar formulario, lista de ubicaciones y scanner en componentes; <code>repo.ts</code> en CRUD por entidad + outbox; <code>Icons.tsx</code> en mapas por dominio. <code>useLatinAmericaLocations.ts</code> (122) pasa los datos a un archivo de constantes.</td><td>Cada archivo ≤100 líneas; <code>npm run typecheck</code> ✅.</td></tr>
+      <tr><td><b>F5 · Cierre</b></td><td>Documentación y métricas</td><td>Actualizar <code>docs/CONTEXTO.md</code> con los archivos tocados, el nuevo conteo y el antes/después. Corregir comentarios desactualizados (<code>CongregationStore.ts:4</code>, <code>useProfileView.ts:15</code>).</td><td>0 archivos TS/TSX &gt;100, o deuda restante listada y justificada; build y typecheck limpios.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout">
+    <p><b>Orden sugerido:</b> F1 da el mayor beneficio con el menor riesgo y va primero; F2 evita que la duplicación se replique al partir las vistas en F3. El objetivo no es llegar a 100 líneas a cualquier costo, sino que <b>todo lo que se toque quede dentro del límite</b> y que la deuda preexistente quede documentada.</p>
+  </div>
+</section>
+
+<section id="accion">
+  <h2>9 · Plan de acción: estabilizar lo crítico</h2>
+  <p>Ordenado por criticidad, con prioridad, responsable, plazo estimado y criterio de aceptación. <b>El estado «Cerrado» sale de la confirmación del usuario</b>; lo demás sigue pendiente y se verifica con SQL en vivo, typecheck o prueba de carga según corresponda. Los plazos son estimaciones de trabajo, no fechas comprometidas.</p>
+
+  <table>
+    <thead><tr><th>Pri.</th><th>Acción</th><th>Responsable</th><th>Plazo</th><th>Criterio de aceptación</th><th>Estado</th></tr></thead>
+    <tbody>
+      <tr><td><b>P0</b></td><td>Login con Google funcionando en el último deploy.</td><td>Usuario</td><td>—</td><td>Inicio de sesión verificado en producción.</td><td><span class="tag t-ok">Cerrado</span></td></tr>
+      <tr><td><b>P0</b></td><td>OAuth client modificado sin riesgo conocido.</td><td>Usuario</td><td>—</td><td>Confirmado por el usuario; sin rotación pendiente.</td><td><span class="tag t-ok">Cerrado</span></td></tr>
+      <tr><td><b>P0</b></td><td>Agregar <code>revoke_tenant_session(p_token)</code>, llamarlo en logout, borrar sesiones al cambiar contraseña y purgar vencidas.</td><td>SQL / backend</td><td>1 día</td><td>Tras logout el token deja de validar en DB; no quedan filas con <code>expires_at &lt; now()</code>.</td><td><span class="tag t-crit">Pendiente</span></td></tr>
+      <tr><td><b>P0</b></td><td>Quitar a <code>authenticated</code> la escritura directa de <code>news</code> por RLS.</td><td>SQL</td><td>1 día</td><td>Solo el RPC definer escribe; la policy no permite INSERT/UPDATE/DELETE a líderes.</td><td><span class="tag t-high">Pendiente</span></td></tr>
+      <tr><td><b>P0</b></td><td>Reemplazar <code>leads_user()</code> por <code>leads_member_contact()</code> en <code>contacts_select</code>.</td><td>SQL</td><td>—</td><td>Ejecutado sin errores el 24/11/2026; guardado en <code>rpcs/fixContactsScope.sql</code>.</td><td><span class="tag t-ok">Cerrado</span></td></tr>
+      <tr><td><b>P0</b></td><td>Alinear <code>list_leaders_congregation_members()</code> con <code>leads_ministry()</code>.</td><td>SQL</td><td>1 día</td><td>Ningún <code>leader</code> ve miembros fuera de su ministerio; <code>admin</code> sí.</td><td><span class="tag t-high">Pendiente</span></td></tr>
+      <tr><td><b>P0</b></td><td>Corregir <code>newsAnnouncements.sql</code> a <code>revoke ... from public, anon</code>, re-ejecutar ambos SQL y auditar grants históricos.</td><td>SQL / consola</td><td>1 día</td><td><code>information_schema.role_routine_grants</code> sin privilegios de <code>anon</code> en funciones sensibles.</td><td><span class="tag t-high">Pendiente</span></td></tr>
+      <tr><td><b>P0</b></td><td>Corregir <code>isAuthSessionError()</code>: <code>vencid</code> → <code>venció</code>.</td><td>Front</td><td>2 h</td><td>Un JWT vencido muestra el botón «Iniciar sesión», no solo «Reintentar».</td><td><span class="tag t-med">Pendiente</span></td></tr>
+      <tr><td><b>P1</b></td><td>Ejecutar <code>rpcs/songbook.sql</code> y verificar <code>uses_songbook</code> y los grants del cancionero.</td><td>Usuario / SQL</td><td>—</td><td>RPCs responden sin <code>PGRST202</code>; <code>anon</code> solo lee el catálogo público y el cifrado exige ministerio.</td><td><span class="tag t-high">Pendiente</span></td></tr>
+      <tr><td><b>P1</b></td><td>Ejecutar <code>rpcs/deleteCongregation.sql</code> y probar «Dejar Redil» en una congregación descartable.</td><td>Usuario / SQL</td><td>—</td><td>Se borran miembros, ministerios, cancionero y cuentas Auth; el token deja de validar y la UI vuelve a <code>/login</code>.</td><td><span class="tag t-high">Pendiente</span></td></tr>
+      <tr><td><b>P1</b></td><td>Unificar <code>callRpc</code>, <code>requireToken()</code> y <code>useSessionKind()</code> (F2 del refactoring).</td><td>Front</td><td>2 días</td><td>14 <code>callRpc(</code> usan la misma implementación; 0 validaciones de token duplicadas.</td><td><span class="tag t-high">Pendiente</span></td></tr>
+      <tr><td><b>P1</b></td><td>Rate limit / lockout y validación de contraseña en SQL para login y registro de congregación.</td><td>SQL / backend</td><td>3 días</td><td>N intentos devuelven 429; la complejidad se exige también en el RPC.</td><td><span class="tag t-high">Pendiente</span></td></tr>
+      <tr><td><b>P1</b></td><td>Borrar código muerto (F1) y agregar CSP + headers en <code>firebase.json</code>.</td><td>Front / deploy</td><td>1 día</td><td>0 imports a <code>src/pages/*</code>; <code>curl -I</code> muestra CSP, <code>X-Content-Type-Options</code>, <code>Referrer-Policy</code> y HSTS.</td><td><span class="tag t-med">Pendiente</span></td></tr>
+      <tr><td><b>P1</b></td><td>Podar credenciales y datos identificativos de <code>CONTEXTO.md</code>.</td><td>Documentación</td><td>1 h</td><td>0 tokens o secretos en docs; emails de prueba reducidos al mínimo.</td><td><span class="tag t-low">Pendiente</span></td></tr>
+      <tr><td><b>P2</b></td><td>Paginación keyset + <code>get_tenant_counts()</code> + <code>get_member_profile()</code> + índices validados con <code>EXPLAIN ANALYZE</code>.</td><td>SQL / front</td><td>1–2 semanas</td><td>Ningún RPC devuelve el conjunto completo; el p95 del Home no crece con el tamaño del tenant.</td><td><span class="tag t-high">Pendiente</span></td></tr>
+      <tr><td><b>P2</b></td><td><code>bump()</code> por canal, SWR con dedupe y <code>AbortController</code>, sync con jitter, <code>Retry-After</code> y tope de reintentos.</td><td>Front</td><td>1 semana</td><td>Una escritura recarga solo la entidad afectada; 0 reintentos infinitos.</td><td><span class="tag t-med">Pendiente</span></td></tr>
+      <tr><td><b>P2</b></td><td>Precache mínimo, <code>immutable</code> en assets, suite de tests, prueba de carga y observabilidad (p95 / conexiones / egress).</td><td>Front / infra</td><td>1–2 semanas</td><td>Precache &lt; 300 KB; resultado de carga con p95 y errores documentado.</td><td><span class="tag t-med">Pendiente</span></td></tr>
+      <tr><td><b>P2</b></td><td>Cambiar de plan (Blaze / Supabase Pro) solo si las métricas siguen marcando cuello.</td><td>Infra</td><td>Según medición</td><td>Decisión documentada con datos; no se ejecuta antes de las tareas P2 anteriores.</td><td><span class="tag t-low">Contexto</span></td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout ok">
+    <p><b>Criterio de «estabilizado»:</b> lo crítico está cerrado cuando no queda token tenant revocable pendiente, ningún líder global ve datos fuera de su ministerio, los grants de <code>anon</code> están auditados en la DB en vivo y la expiración de sesión muestra el botón correcto. Recién ahí se mide robustez a 100k con prueba de carga; el cambio de plan es la última palanca, no la primera.</p>
+  </div>
+</section>
+
+<section id="historial">
+  <h2>10 · Qué se hizo hasta ahora</h2>
+  <p>El historial completo vive en <code>docs/CONTEXTO.md</code> (subsecciones numeradas 16.1–16.35, con los dos planes agregados en esta ronda). Este resumen agrupa los hitos por tema para entender la evolución sin leer el documento completo.</p>
+
+  <table>
+    <thead><tr><th>Fase</th><th>Sección</th><th>Qué se decidió / implementó</th></tr></thead>
+    <tbody>
+      <tr><td><b>Fundamentos</b></td><td>1–9</td><td>Propósito multi-tenant, premisas obligatorias, stack, modelo de autenticación unificada, inventario de pantallas y decisiones arquitectónicas (vistas puras, RPCs, RLS).</td></tr>
+      <tr><td><b>Deuda y reglas</b></td><td>10–15</td><td>Deuda técnica, convenciones de nombres (tenant solo en código), registro de cambios, reglas de vistas por perfil y diseño de red social interna/externa con fotos de Unsplash.</td></tr>
+      <tr><td><b>Ajustes de producto</b></td><td>16.1–16.4</td><td>Contadores del Home con TTL en <code>localStorage</code>, edición de perfil, iconografía y lenguaje: el usuario dice «congregación».</td></tr>
+      <tr><td><b>UI y ministerios</b></td><td>16.5–16.11</td><td>Corrección de errores probados, Home/Perfil/Ajustes/Calendario, ministerios gestionados solo en su vista, selector de iconos, CRUD de ministerios y toasts.</td></tr>
+      <tr><td><b>Perfil y avisos</b></td><td>16.12–16.16</td><td>Foto y portada desde Unsplash, congregación visible en el perfil, avisos persistidos en <code>news</code> con <code>is_global</code>, selectors separados.</td></tr>
+      <tr><td><b>Pre-producción</b></td><td>16.17–16.21</td><td>Auditoría previa, preparación del primer deploy, idempotencia de R1, ejecución del SQL real y cierre de grants, elección de Firebase Hosting sobre GitHub Pages.</td></tr>
+      <tr><td><b>Deploy y fixes</b></td><td>16.22–16.25</td><td>Primer deploy, redirect OAuth a localhost, tarjeta «Miembros» solo para tenant, perfil de miembro clickeable, guía operativa, PKCE y corrección visual PWA en iOS.</td></tr>
+      <tr><td><b>Auditoría</b></td><td>16.26</td><td>Generación de <code>docs/auditoria.html</code> con los siete ejes y métricas medidas; corregido después para dar por cerrados login/OAuth y centrar el eje 100k en la robustez del código.</td></tr>
+      <tr><td><b>Planes</b></td><td>16.27–16.28</td><td>Plan de refactoring para llevar los archivos a ≤100 líneas y plan de acción con prioridades, responsables, plazos y criterios de verificación.</td></tr>
+      <tr><td><b>Carga y cancionero</b></td><td>16.29–16.32</td><td>Contactos con alcance por ministerio, overlay con spinner en toda carga, contraseña visible u oculta y cancionero con letra pública, cifrado privado por ministerio, colores por nota y tono global a cargo solo del líder del ministerio.</td></tr>
+      <tr><td><b>Baja física</b></td><td>16.33</td><td>RPCs <code>delete_tenant_member</code> y <code>delete_congregation</code>: se eliminan miembros, ministerios, grupos, cancionero, avisos, publicaciones y cuentas Auth. Disparador «Dejar Redil» en el perfil del tenant y «Eliminar de Redil» en el perfil de cada miembro, con confirmación por frase exacta.</td></tr>
+      <tr><td><b>Estados de verificación</b></td><td>16.34</td><td>Pantalla de espera dedicada para congregaciones con <code>vify=false</code> (sin sesión ni cambios de SQL) y tilde azul estilo Twitter para las verificadas, en la cabecera de la app y en el Perfil del tenant.</td></tr>
+      <tr><td><b>Salida de R7</b></td><td>16.35</td><td>«Volver al inicio» en el modal de solicitud de código: cierra Auth, limpia <code>localStorage</code> e IndexedDB y devuelve al login para elegir Miembro o Congregación. El «Volver» interno ahora es «Volver a opciones».</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Cómo funciona el sistema, en una página</h3>
+  <div class="flow">
+    <div class="step"><div class="n">PRESENTACIÓN</div><div class="t">Vistas puras</div><div class="d"><code>src/views/*</code> solo renderizan. No importan Supabase ni deciden permisos.</div></div>
+    <div class="arrow">→</div>
+    <div class="step"><div class="n">ESTADO</div><div class="t">Viewmodels</div><div class="d"><code>src/features/**/hooks</code> cargan datos con <code>useAsyncData</code> y exponen estado listo.</div></div>
+    <div class="arrow">→</div>
+    <div class="step"><div class="n">ACCESO</div><div class="t">Services + RPC</div><div class="d"><code>callRpc</code> con timeout de 15 s y errores traducidos. Ningún cliente directo a tablas.</div></div>
+    <div class="arrow">→</div>
+    <div class="step"><div class="n">SEGURIDAD</div><div class="t">RLS + definer</div><div class="d">Las funciones validan sesión y tenant. La anon key no puede eludirlas.</div></div>
+  </div>
+
+  <div class="grid2">
+    <div class="panel">
+      <h4>Sesión de congregación (tenant)</h4>
+      <ul class="clean">
+        <li>Login con email + contraseña vía RPC <code>login_congregation</code>.</li>
+        <li>Devuelve un <code>session_token</code> opaco de 12 hs guardado en <code>tenant_sessions</code>.</li>
+        <li>Persistido en <code>localStorage</code> (<code>redil-congregation</code>) con zustand.</li>
+        <li><code>auth.uid()</code> es <b>null</b>: por eso los RPC del tenant reciben el token como parámetro.</li>
+        <li>El router valida el token y muestra alerta global si venció.</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <h4>Sesión de miembro</h4>
+      <ul class="clean">
+        <li>Google OAuth con Supabase Auth, ahora con flujo <b>PKCE</b>.</li>
+        <li>Identidad = <code>auth.uid()</code> + fila en <code>memberships</code>.</li>
+        <li>Sin membresía, <code>MemberAccessGuard</code> envía a <code>/acceso</code> (modal R7).</li>
+        <li>Nunca coexisten con la sesión tenant: una baja a la otra.</li>
+        <li>Datos locales en IndexedDB; contadores en <code>localStorage</code>.</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>Reglas de negocio que el código respeta</h3>
+  <table>
+    <thead><tr><th>Regla</th><th>Implementación</th></tr></thead>
+    <tbody>
+      <tr><td>Una persona, una congregación (R1)</td><td><code>memberships_user_id_key · UNIQUE (user_id)</code> + script <code>enforceR1.sql</code> idempotente.</td></tr>
+      <tr><td>Líder solo de su ministerio</td><td><code>ministry_members.ministry_role = 'leader'</code>; las policies usan <code>is_admin() OR leads_ministry()</code>. No hay líder global.</td></tr>
+      <tr><td>Perfiles entre congregaciones</td><td>Solo si ambas tienen <code>vify = true</code>.</td></tr>
+      <tr><td>Avisos compartidos</td><td><code>share_announcements</code> nace en <code>false</code>; <code>is_global = true</code> lo ven todos los tenants verificados.</td></tr>
+      <tr><td>Vocabulario</td><td>El usuario ve «congregación»; <em>tenant</em> solo en código, SQL y comentarios.</td></tr>
+      <tr><td>Fotos</td><td>Unsplash con búsqueda inicial <code>paisaje</code>; sin subida de archivos.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section id="metodologia">
+  <h2>Metodología, fuentes y límites</h2>
+
+  <h3>Cómo se midió</h3>
+  <ul class="clean">
+    <li><b>Líneas:</b> conteo directo de archivos (<code>Get-Content | Count</code>) en <code>src/</code>, <code>docs/</code> y <code>src/supabase/</code>, excluyendo <code>node_modules</code> y <code>dist</code>. Incluye líneas en blanco y comentarios.</li>
+    <li><b>Bundle:</b> salida real de <code>npm run build</code> (Vite 8.3.8 + <code>tsc --noEmit</code>): 90 archivos en <code>dist/</code>, 1,82 MB sin comprimir, precache de 86 entradas / 1.486,01 KiB.</li>
+    <li><b>SQL:</b> inventario de 13 archivos, 60 definiciones de funciones, 7 policies, 54 <code>GRANT</code>, 10 tablas, 11 índices y 9 triggers por búsqueda de patrones.</li>
+    <li><b>Código:</b> 224 <code>export function</code>, 14 <code>callRpc(</code>, 95 <code>useState(</code>, 28 <code>useEffect(</code>, 0 <code>TODO/FIXME</code>, 4 <code>console.</code>, 1 directiva de lint desactivada y 0 usos de <code>any</code> explícito. El conteo preliminar de 23 era un falso positivo: la búsqueda no distinguía mayúsculas y matcheó «todo» en texto normal.</li>
+    <li><b>Planes:</b> límites oficiales vigentes al 24/11/2026, tomados de <a href="https://firebase.google.com/pricing" target="_blank" rel="noopener">Firebase Pricing</a> y <a href="https://supabase.com/pricing" target="_blank" rel="noopener">Supabase Pricing</a>.</li>
+    <li><b>Interpretación de 100k:</b> concurrentes activos, no cuentas registradas. El usuario aclaró que se evalúa la preparación del código, no la capacidad del plan actual; por eso los límites de Spark/Free figuran como contexto y no como veredicto.</li>
+  </ul>
+
+  <h3>Lo que NO se pudo verificar</h3>
+  <ul class="clean">
+    <li><b>Sin acceso a la base en vivo</b>: las políticas y grants se auditaron leyendo los <code>.sql</code>, no consultando <code>pg_policies</code> ni <code>information_schema</code>. Los dos scripts con <code>revoke ..., anon</code> corregidos (16.20) figuran como pendientes de re-ejecución en el historial.</li>
+    <li><b>Historial git parcial</b>: hay 2 commits (<code>d4dcaa5</code>, <code>5f1daf7</code>) pero los cambios de auditoría están sin commitear; la «deuda preexistente» se infiere del documento maestro y del estado actual de los archivos.</li>
+    <li><b>Sin perfiles de ejecución</b>: no se midió TTFB, latencia de RPC ni renders reales; las cifras de rendimiento son modelos analíticos, no mediciones de producción.</li>
+    <li><b>Sin pruebas de carga</b>: el escenario de 100.000 concurrentes es un análisis de límites y extrapolación, no un benchmark.</li>
+    <li><b>Login/OAuth: verificación del usuario</b>: confirmó que funcionan con el último deploy. No se volvieron a probar desde esta sesión, pero tampoco se los trata como pendientes.</li>
+  </ul>
+
+  <h3>Glosario</h3>
+  <table>
+    <thead><tr><th>Término</th><th>Significado acá</th></tr></thead>
+    <tbody>
+      <tr><td>Tenant</td><td>Una congregación. Palabra usada solo en código/SQL; el usuario final ve «congregación».</td></tr>
+      <tr><td>RPC</td><td>Función de Postgres llamada desde el front; toda escritura pasa por una.</td></tr>
+      <tr><td>RLS</td><td>Row Level Security: filas visibles según la sesión.</td></tr>
+      <tr><td>Security definer</td><td>La función corre con los permisos de quien la creó y valida por su cuenta.</td></tr>
+      <tr><td>R1</td><td>Un <code>user_id</code> pertenece como máximo a una congregación.</td></tr>
+      <tr><td>R7</td><td>Sin membresía no se entra: pantalla de acceso obligatoria.</td></tr>
+      <tr><td>Outbox</td><td>Cola local de operaciones pendientes de sincronizar.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<footer>
+  <p>Redil · auditoría generada el 24/11/2026 · documento autocontenido, sin dependencias externas. Incluye los planes de <a href="#refactoring">refactoring</a> y de <a href="#accion">acción</a> (secciones 8 y 9). Las cifras de líneas se midieron sobre el working directory; los límites de planes se tomaron de la documentación oficial de Firebase y Supabase (enlaces en Metodología). Las proyecciones a 100.000 usuarios están marcadas como estimaciones y el foco es la robustez del código, no la capacidad del plan.</p>
+</footer>
+
+</div>
+</body>
+</html>
