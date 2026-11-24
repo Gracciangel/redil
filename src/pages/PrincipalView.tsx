@@ -1,0 +1,1 @@
+export { PrincipalView } from '@/views/PrincipalView'

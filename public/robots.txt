@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+# Redil es una SPA: solo se rastrea el shell público, nunca datos locales.
