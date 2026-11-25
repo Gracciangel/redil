@@ -3,6 +3,7 @@ import { Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom'
 import { Layout } from '@/components/Layout'
 import { LoadingOverlay } from '@/components/LoadingOverlay'
 import { TenantSessionAlert } from '@/features/congregations/components/TenantSessionAlert'
+import { usePastorCongregationBoot } from '@/features/pastor/hooks/usePastorCongregationBoot'
 import { validateCongregationSession } from '@/supabase/login'
 import { isSessionExpired, useCongregationStore } from '@/store/CongregationStore'
 import { useUserStore } from '@/store/Store'
@@ -10,8 +11,8 @@ import { MemberAccessGuard } from './MemberAccessGuard'
 import {
   AccessRequiredView, AnnouncementsView, BibleView, CalendarView, CodeView,
   CongregationHomeView, DashboardView, DirectoryView, EventsView, MemberHomeView,
-  MemberProfileView, MembersView, MinistriesView, NotFoundView, PrincipalView, ProfileView,
-  SettingsView, SongbookView,
+  MemberProfileView, MembersView, MinistriesView, NotFoundView, PrincipalView,
+  SettingsView, SongbookView, TenantProfileView,
 } from './lazyViews'
 
 function ProtectedRoute() {
@@ -19,6 +20,7 @@ function ProtectedRoute() {
   const authReady = useUserStore((s) => s.authReady)
   const congregation = useCongregationStore((s) => s.congregation)
   const location = useLocation()
+  usePastorCongregationBoot()
   // El cancionero público (título y letra) se abre sin sesión.
   const isPublicSongbook = location.pathname === '/cancionero'
   const [tenantReady, setTenantReady] = useState(!congregation)
@@ -69,7 +71,7 @@ export function AppRoutes() {
             <Route element={<Layout />}>
               {/* Únicas pantallas del tab, según rulesView.md. */}
               <Route index element={<DashboardView />} />
-              <Route path="perfil" element={<ProfileView />} />
+              <Route path="perfil" element={<TenantProfileView />} />
               <Route path="ajustes" element={<SettingsView />} />
               <Route path="biblia" element={<BibleView />} />
               <Route path="calendario" element={<CalendarView />} />

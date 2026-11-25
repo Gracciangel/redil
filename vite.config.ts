@@ -95,6 +95,17 @@ export default defineConfig({
         cleanupOutdatedCaches: true,
         runtimeCaching: [
           {
+            // Biblia: un JSON por libro. Se baja una vez y queda offline; el
+            // índice tampoco entra en el precache porque globPatterns excluye .json.
+            urlPattern: ({ url }) => url.pathname.startsWith('/biblia/'),
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'redil-biblia',
+              expiration: { maxEntries: 80, maxAgeSeconds: 60 * 60 * 24 * 365 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+          {
             // API propia: red primero, con caché de respaldo cuando no hay conexión.
             urlPattern: ({ url }) => url.pathname.startsWith('/api/'),
             handler: 'NetworkFirst',

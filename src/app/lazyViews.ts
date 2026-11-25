@@ -40,6 +40,9 @@ export const CodeView = lazy(() =>
 export const ProfileView = lazy(() =>
   import('@/views/ProfileView').then((m) => ({ default: m.ProfileView })),
 )
+export const TenantProfileView = lazy(() =>
+  import('@/views/TenantProfileView').then((m) => ({ default: m.TenantProfileView })),
+)
 export const BibleView = lazy(() =>
   import('@/views/BibleView').then((m) => ({ default: m.BibleView })),
 )

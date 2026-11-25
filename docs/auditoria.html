@@ -820,6 +820,7 @@
       <tr><td><b>P0</b></td><td>Corregir <code>isAuthSessionError()</code>: <code>vencid</code> → <code>venció</code>.</td><td>Front</td><td>2 h</td><td>Un JWT vencido muestra el botón «Iniciar sesión», no solo «Reintentar».</td><td><span class="tag t-med">Pendiente</span></td></tr>
       <tr><td><b>P1</b></td><td>Ejecutar <code>rpcs/songbook.sql</code> y verificar <code>uses_songbook</code> y los grants del cancionero.</td><td>Usuario / SQL</td><td>—</td><td>RPCs responden sin <code>PGRST202</code>; <code>anon</code> solo lee el catálogo público y el cifrado exige ministerio.</td><td><span class="tag t-high">Pendiente</span></td></tr>
       <tr><td><b>P1</b></td><td>Ejecutar <code>rpcs/deleteCongregation.sql</code> y probar «Dejar Redil» en una congregación descartable.</td><td>Usuario / SQL</td><td>—</td><td>Se borran miembros, ministerios, cancionero y cuentas Auth; el token deja de validar y la UI vuelve a <code>/login</code>.</td><td><span class="tag t-high">Pendiente</span></td></tr>
+      <tr><td><b>P1</b></td><td>Ejecutar <code>rpcs/pastorCongregation.sql</code> y probar alta/edición del pastor en una congregación descartable.</td><td>Usuario / SQL</td><td>—</td><td><code>get_pastor_congregation</code> devuelve <code>is_complete=false</code> sin fila; «Completar» guarda nombre y apellido, y bio y credenciales-imagen aparecen en <code>/perfil</code> del tenant.</td><td><span class="tag t-high">Pendiente</span></td></tr>
       <tr><td><b>P1</b></td><td>Unificar <code>callRpc</code>, <code>requireToken()</code> y <code>useSessionKind()</code> (F2 del refactoring).</td><td>Front</td><td>2 días</td><td>14 <code>callRpc(</code> usan la misma implementación; 0 validaciones de token duplicadas.</td><td><span class="tag t-high">Pendiente</span></td></tr>
       <tr><td><b>P1</b></td><td>Rate limit / lockout y validación de contraseña en SQL para login y registro de congregación.</td><td>SQL / backend</td><td>3 días</td><td>N intentos devuelven 429; la complejidad se exige también en el RPC.</td><td><span class="tag t-high">Pendiente</span></td></tr>
       <tr><td><b>P1</b></td><td>Borrar código muerto (F1) y agregar CSP + headers en <code>firebase.json</code>.</td><td>Front / deploy</td><td>1 día</td><td>0 imports a <code>src/pages/*</code>; <code>curl -I</code> muestra CSP, <code>X-Content-Type-Options</code>, <code>Referrer-Policy</code> y HSTS.</td><td><span class="tag t-med">Pendiente</span></td></tr>
@@ -838,7 +839,7 @@
 
 <section id="historial">
   <h2>10 · Qué se hizo hasta ahora</h2>
-  <p>El historial completo vive en <code>docs/CONTEXTO.md</code> (subsecciones numeradas 16.1–16.35, con los dos planes agregados en esta ronda). Este resumen agrupa los hitos por tema para entender la evolución sin leer el documento completo.</p>
+  <p>El historial completo vive en <code>docs/CONTEXTO.md</code> (subsecciones numeradas 16.1–16.37, con los dos planes agregados en esta ronda). Este resumen agrupa los hitos por tema para entender la evolución sin leer el documento completo.</p>
 
   <table>
     <thead><tr><th>Fase</th><th>Sección</th><th>Qué se decidió / implementó</th></tr></thead>
@@ -856,6 +857,8 @@
       <tr><td><b>Baja física</b></td><td>16.33</td><td>RPCs <code>delete_tenant_member</code> y <code>delete_congregation</code>: se eliminan miembros, ministerios, grupos, cancionero, avisos, publicaciones y cuentas Auth. Disparador «Dejar Redil» en el perfil del tenant y «Eliminar de Redil» en el perfil de cada miembro, con confirmación por frase exacta.</td></tr>
       <tr><td><b>Estados de verificación</b></td><td>16.34</td><td>Pantalla de espera dedicada para congregaciones con <code>vify=false</code> (sin sesión ni cambios de SQL) y tilde azul estilo Twitter para las verificadas, en la cabecera de la app y en el Perfil del tenant.</td></tr>
       <tr><td><b>Salida de R7</b></td><td>16.35</td><td>«Volver al inicio» en el modal de solicitud de código: cierra Auth, limpia <code>localStorage</code> e IndexedDB y devuelve al login para elegir Miembro o Congregación. El «Volver» interno ahora es «Volver a opciones».</td></tr>
+      <tr><td><b>Biblia</b></td><td>16.36</td><td>Módulo extraído de tdgApp: lector de 66 libros RV1960 divididos por libro, búsqueda por referencia, favoritos y apariencia en <code>localStorage</code>, y versículo del día distinto cada día en el Home. Sin SQL nuevo y con caché offline por libro.</td></tr>
+      <tr><td><b>Datos del pastor</b></td><td>16.37</td><td>Tabla <code>pastor_congregation</code> ya creada por el usuario: dos RPCs con token de sesión para leer y guardar nombre, apellido, bio y hasta tres credenciales-imagen. La tarjeta se edita y se ve solo en el Perfil del tenant, con lectura no bloqueante al iniciar sesión.</td></tr>
     </tbody>
   </table>
 

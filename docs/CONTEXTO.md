@@ -3,7 +3,7 @@
 > Documento vivo. Sirve para que cualquier sesión futura arranque con el mismo
 > contexto. **Todo cambio relevante debe registrarse acá.**
 
-Última actualización: 2026-11-17
+Última actualización: 2026-11-24
 
 ---
 
@@ -1803,6 +1803,7 @@ A continuación se aplicaron todos los demás ítems bloqueantes e importantes.
 13. `src/supabase/rpcs/fixContactsScope.sql` (alcance de contactos por ministerio; ver 16.29)
 14. `src/supabase/rpcs/songbook.sql` (cancionero, flag `uses_songbook` y RPCs; ver 16.32)
 15. `src/supabase/rpcs/deleteCongregation.sql` (baja de miembros y de congregación; ver 16.33)
+16. `src/supabase/rpcs/pastorCongregation.sql` (datos del pastor; ver 16.37)
 
 **En una DB que ya existe NO correr `redil_schema.sql` entero** (no es
 idempotente): aplicar los cambios a mano. Antes de crear los índices únicos,
@@ -1931,6 +1932,8 @@ exists`, `create or replace`, `drop policy if exists` y `drop trigger if exists`
 7. `rpcs/fixContactsScope.sql` (alcance de contactos por ministerio; ver 16.29)
 8. `rpcs/songbook.sql` (cancionero, flag `uses_songbook` y RPCs; ver 16.32)
 9. `rpcs/deleteCongregation.sql` (baja de miembros y de congregación; ver 16.33)
+10. `rpcs/pastorCongregation.sql` (datos del pastor; requiere que la tabla
+    `pastor_congregation` ya exista; ver 16.37)
 
 **Verificación sugerida después de correrlos:**
 
@@ -2564,12 +2567,13 @@ El esquema confirmó además que `memberships.user_id` es `Unique`, así que R1 
 está aplicada en vivo, y que `ministry_members` ya trae `congregation_id`,
 `ministry_id`, `membership_id` y `ministry_role`: suficiente para la consulta.
 
-**Inventario SQL en el repo:** 16 archivos (el esquema maestro
-`redil_schema.sql` más 15 en `rpcs/`). Del total, 15 entran en el orden de 16.18
-para DB nueva y `deployExistingDb.sql` se usa solo en el orden de 16.19 para DB
-existente. También están documentados el cierre de grants de 16.20 y la guía
-operativa de 16.23. `redil_schema.sql` **no es idempotente**: para una DB ya
-creada se usa `deployExistingDb.sql`.
+**Inventario SQL en el repo:** 17 archivos (el esquema maestro
+`redil_schema.sql` más 16 en `rpcs/`). Del total, 15 entran en el orden vigente
+para DB nueva (ahora con `pastorCongregation.sql` como paso 16) y
+`deployExistingDb.sql` se usa solo en el orden de 16.19 para DB existente.
+También están documentados el cierre de grants de 16.20 y la guía operativa de
+16.23. `redil_schema.sql` **no es idempotente**: para una DB ya creada se usa
+`deployExistingDb.sql`.
 
 **Lo que NO está en el repo y por eso no se migra con SQL:**
 
@@ -2911,3 +2915,121 @@ R7 vieja.
 de `AccessRequiredView` pasó de ~7,5 kB a ~8,0 kB. `AccessRequiredView` quedó en
 54 líneas; `AccessRequiredModal` en 133 (deuda preexistente, +10). No se tocó
 SQL ni se publicó con `npm run deploy`.
+
+### 16.36 Módulo de Biblia extraído de tdgApp e integrado en Redil (2026-11-24)
+
+El usuario pidió extraer el módulo de Biblia de `C:\Users\angel\tdgApp` y traerlo
+a Redil. Después de mapear el proyecto externo se confirmaron las decisiones:
+lector con búsqueda por referencia, favoritos y apariencia, versículo del día
+**siempre visible en el Home y distinto cada día**; favoritos y preferencias
+**solo locales**; RV1960 **dividido por libro**; y `/biblia` **solo con sesión**
+(igual que hoy, dentro de `MemberAccessGuard`). No se trajo el editor de
+tarjetas para compartir.
+
+#### Qué se trajo y qué se reescribió
+
+Portable: los 66 libros (`BibleBook.ts` → `lib/books.ts`), el JSON RV1960, la
+indexación 0-based, los saltos `/n` y la búsqueda por referencia. Nativo, por lo
+tanto reescrito en MUI/web: `expo-sqlite` → `localStorage` + `fetch`,
+`FlatList` → `Box` con CSS grid, `PanResponder`/swipe → botones, `Share` → Web
+Share API con copia al portapapeles, y los iconos de Expo → `@mui/icons-material`.
+Se descartaron `CardEditor`, `useCardEditor`, `view-shot`, `image-picker`, Lottie
+y los fondos `.webp` porque el usuario no pidió tarjetas.
+
+#### Datos
+
+| Archivo | Cambio |
+| --- | --- |
+| `tools/biblia-rv1960.json` | Copia literal de la fuente de tdgApp (4.008.791 bytes, 66 libros, 31.103 versículos, 9.209 marcadores `/n`). |
+| `tools/split-bible.mjs` | Script reproducible (`npm run biblia:split`) que genera un JSON por libro y un índice de cantidades por capítulo. |
+| `public/biblia/<key>.json` | 66 archivos minificados, `string[][]`: capítulos 0-based y versículos 0-based. Solo se descarga el libro abierto. |
+| `public/biblia/index.json` | `Record<bookKey, number[]>`: cuántos versículos tiene cada capítulo. Permite dibujar la grilla de capítulos sin bajar el texto. |
+| `vite.config.ts` | Runtime caching `CacheFirst` en `/biblia/` con caché `redil-biblia` (80 entradas, 1 año). `globPatterns` ya excluía `.json`, así que ninguno de los 67 archivos entra en el precache. |
+
+#### Código nuevo
+
+| Capa | Archivos |
+| --- | --- |
+| Tipos y constantes | `src/features/bible/lib/types.ts`, `books.ts`, `bookUtils.ts`, `share.ts`. `findBook()` ignora tildes, mayúsculas y espacios extra, así que «Juan 3:16», «juan 3:16» y «1 Corintios 13:4» funcionan. |
+| Servicios | `services/bibleService.ts` (índice y libros con promise-cache, normalización de `/n`, parser de referencias), `services/verseOfDay.ts`, `services/bibleLocal.ts`. |
+| Local | `redil-bible-favorites` y `redil-bible-preferences` en `localStorage`, con validación al leer. No hay tablas, RPCs ni grants nuevos. |
+| Hooks | `useBible` (modos, paso libros/capítulos/lectura, selección, búsqueda, favoritos y preferencias), `useBibleFavorites`, `useBiblePreferences`, `useVerseOfDay`, `useVerseOfDayCard`. |
+| Componentes | `BibleModeSelector`, `BibleBookGrid`, `BibleChapterGrid`, `BibleReader`, `BibleVerseRow`, `BibleSearchBar`, `BibleFavorites`, `BibleAppearancePanel` y `VerseOfDayCard`. Todos separados y por debajo de 100 líneas. |
+| Vistas | `src/views/BibleView.tsx` (99 líneas) quedó como vista pura; `src/views/DashboardView.tsx` (98 líneas) inserta `<VerseOfDayCard {...verseOfDay} />` antes de los contadores, para tenant y miembro. |
+
+El versículo del día usa los 7.958 versículos del Nuevo Testamento en orden y
+elige por número de día local módulo 7.958: dos días consecutivos nunca
+repiten referencia. Solo baja el libro elegido. La tarjeta del Home tiene
+favorito, compartir y un enlace a `/biblia?ref=<referencia>`; la vista abre esa
+referencia al montarse. El lector permite navegar AT/NT, cambiar de capítulo,
+resaltar una palabra, cambiar colores/tamaño y volver desde favoritos.
+
+**Verificación:** `npm run typecheck` y `npm run build` sin errores; 67 JSON en
+`dist/biblia`, runtime caching presente en `dist/sw.js` y ningún JSON en el
+precache (los 100 entries/1,57 MiB del precache son los mismos de antes).
+Comprobación con el índice generado: 400 días consecutivos → 400 referencias
+únicas, 0 repeticiones (por ejemplo `hechos 9:13` y `hechos 9:14`). Los archivos
+nuevos tienen entre 13 y 86 líneas; `BibleView` 99 y `DashboardView` 98.
+`vite.config.ts` pasó de 128 a 139 líneas (deuda preexistente documentada en el
+plan de refactoring). No se ejecutó SQL ni se publicó con `npm run deploy`.
+
+---
+
+### 16.37 Datos del pastor de la congregación (2026-11-24)
+
+El usuario detectó que no había datos del pastor y pidió una tabla nueva
+vinculada por FK a `congregations`: `pastor_congregation`. **La tabla ya la creó
+el usuario, así que el SQL no la crea.** Nombre y apellido son obligatorios; bio
+y tres credenciales (rutas a diplomas o reconocimientos) son opcionales. El
+usuario eligió que los cargue el tenant desde la app, que las credenciales se
+muestren como miniaturas de imagen y —tras la aclaración— que **la tarjeta
+aparezca únicamente en el Perfil del tenant**; no en el Home ni en `/miembro`,
+aunque el pedido original mencionaba «el muro». No se suben archivos: los
+campos guardan rutas.
+
+Al iniciar sesión se lee el estado (`is_complete = nombre y apellido
+presentes`) de forma no bloqueante. Si el RPC todavía no se ejecutó, el error se
+ignora a propósito para no dejar al usuario afuera.
+
+#### Capa SQL
+
+**Archivo nuevo:** `src/supabase/rpcs/pastorCongregation.sql` (idempotente;
+paso 16 en DB nueva y paso 10 en DB existente). Va **después de**
+`tenantAdmin.sql` porque usa `public.tenant_from_token(p_token)`. Activa RLS y
+hace `revoke all` de la tabla a `anon`/`authenticated`: solo se accede por RPC.
+
+| RPC | Firma | Confirmación |
+| --- | --- | --- |
+| `get_pastor_congregation` | `(uuid) → fila con is_complete` | `stable security definer`, token vencido con el mensaje canónico. Sin fila: campos vacíos e `is_complete=false`. |
+| `save_pastor_congregation` | `(uuid, text, text, text, text, text, text)` | `security definer`, `nullif(btrim(...))`, exige nombre y apellido, inserta o actualiza **una sola fila** por congregación. |
+
+Ambos filtran por `congregation_id = tenant_from_token(p_token)`, dan grants
+explícitos a `anon, authenticated` (el tenant entra con token, sin
+`auth.uid()`) y terminan con `notify pgrst, 'reload schema'`.
+
+#### Capa frontend
+
+| Archivo | Rol | Líneas |
+| --- | --- | ---: |
+| `src/features/pastor/services/pastorService.ts` | DTO y lectura/escritura con `callRpc` + `requireToken()` | 66 |
+| `src/features/pastor/lib/credentials.ts` | rutas no vacías; miniatura si es imagen, si no `Chip` enlazado | 18 |
+| `src/features/pastor/hooks/usePastorCongregation.ts` | viewmodel con `useAsyncData` + `useActionRunner` | 19 |
+| `src/features/pastor/hooks/usePastorCongregationBoot.ts` | lectura al iniciar sesión; ignora errores | 16 |
+| `src/features/pastor/components/PastorCongregationCard.tsx` | tarjeta con «Completar»/«Editar», bio y credenciales | 70 |
+| `src/features/pastor/components/PastorCongregationDialog.tsx` | formulario de nombre, apellido, bio y 3 credenciales | 73 |
+| `src/views/TenantProfileView.tsx` | envoltorio que agrega la tarjeta solo si `isTenant` | 14 |
+| `src/app/AppRoutes.tsx` | `/perfil` usa `TenantProfileView` y dispara el boot | 96 |
+| `src/app/lazyViews.ts` | lazy de `TenantProfileView` | 60 |
+
+`ProfileView` quedó intacto (269 líneas, deuda preexistente): la tarjeta se
+monta como hermana, no dentro del perfil existente.
+
+**Verificación:** `npm run typecheck` y `npm run build` sin errores; el build
+generó el chunk `TenantProfileView` (4,20 kB) y el precache pasó de 100 a 101
+entries (1.576,71 KiB). Todos los archivos nuevos y tocados quedaron ≤100
+líneas. No se ejecutó SQL en vivo ni se publicó con `npm run deploy`.
+
+**Pendiente del usuario:** ejecutar `src/supabase/rpcs/pastorCongregation.sql`
+en el SQL Editor y probar en una congregación descartable: sin fila debe dar
+`is_complete=false`, «Completar» debe guardar nombre y apellido, y la bio y las
+credenciales-imagen deben verse en `/perfil` del tenant.

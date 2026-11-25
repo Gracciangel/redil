@@ -3,10 +3,12 @@ import { Link as RouterLink } from 'react-router-dom'
 import { Alert, Box, Card, CardActionArea, IconButton, Stack, Tooltip, Typography } from '@mui/material'
 import RefreshOutlinedIcon from '@mui/icons-material/RefreshOutlined'
 import { LoadingList } from '@/components/Feedback'
+import { VerseOfDayCard } from '@/features/bible/components/VerseOfDayCard'
 import { EntityIcon } from '@/features/congregations/components/EntityIcon'
 import { TenantSessionAlert } from '@/features/congregations/components/TenantSessionAlert'
 import { useSessionIdentity } from '@/features/profile/hooks/useSessionIdentity'
 import { useDashboardView } from '@/features/dashboard/hooks/useDashboardView'
+import { useVerseOfDayCard } from '@/features/bible/hooks/useVerseOfDayCard'
 
 function greeting(): string {
   const hour = new Date().getHours()
@@ -38,6 +40,7 @@ function StatCard({ to, icon, value, label }: { to: string; icon: ReactNode; val
 export function DashboardView() {
   const identity = useSessionIdentity()
   const vm = useDashboardView()
+  const verseOfDay = useVerseOfDayCard()
 
   return (
     <Box>
@@ -60,6 +63,8 @@ export function DashboardView() {
           </Tooltip>
         )}
       </Stack>
+
+      <VerseOfDayCard {...verseOfDay} />
 
       {vm.loading && !vm.hasData ? (
         <LoadingList rows={3} />
